@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v6.1 - Final Sync 🍌</title>
+    <title>🍌 Bananakun v7.0 - Pure Banana 🍌</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
         * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -55,13 +55,13 @@
     <script>
         let audioCtx, analyzer, processor, bananaBuffer = [];
         let isRecording = false;
+        let lastBeepTime = 0;
 
         const startBtn = document.getElementById('start-btn');
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
         const msg = document.getElementById('msg');
 
-        // 1. 起動処理
         startBtn.onclick = async () => {
             try {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -72,16 +72,22 @@
                 analyzer.fftSize = 256;
                 source.connect(analyzer);
 
-                // 録音用プロセッサ（ここで音をキャッチして配列に入れる）
                 processor = audioCtx.createScriptProcessor(4096, 1, 1);
                 processor.onaudioprocess = (e) => {
                     if (isRecording) {
-                        const inputData = e.inputBuffer.getChannelData(0);
-                        // 声の波形をそのままバッファに保存
-                        bananaBuffer.push(...new Float32Array(inputData));
-                        
-                        // 録音中に声を検知したら「バナナの音」を鳴らす（モニター用）
-                        checkVolumeAndBeep();
+                        // 声を解析して音量を取得
+                        const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+                        analyzer.getByteFrequencyData(dataArray);
+                        const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+
+                        // 一定以上の音量があるときだけ、バナナ音をバッファに書き込む
+                        if (volume > 20) {
+                            writeBananaWave();
+                        } else {
+                            // 無音時は無音を書き込む
+                            const output = new Float32Array(e.inputBuffer.length);
+                            bananaBuffer.push(...output);
+                        }
                     }
                 };
                 source.connect(processor);
@@ -93,24 +99,24 @@
             }
         };
 
-        // 録音中のピコピコ音
-        function checkVolumeAndBeep() {
-            const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-            analyzer.getByteFrequencyData(dataArray);
-            const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
-
-            if (volume > 25) { // 感度を少し上げました
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(1000 + Math.random() * 500, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.1);
+        // 「バ」「ナ」に近い合成音を生成してバッファに追加する関数
+        function writeBananaWave() {
+            const sampleCount = 4096;
+            const wave = new Float32Array(sampleCount);
+            const now = audioCtx.currentTime;
+            
+            // 0.15秒に1回、音節を切り替える（バ・ナ・バ・ナ...）
+            if (now - lastBeepTime > 0.15) {
+                const freq = 400 + Math.random() * 600; // ランダムなピッチ
+                for (let i = 0; i < sampleCount; i++) {
+                    // 矩形波とサイン波を混ぜて「バ」っぽいアタックを作る
+                    wave[i] = Math.sin(i * 0.2) * Math.sign(Math.sin(i * freq / audioCtx.sampleRate)) * 0.2;
+                    // 減衰
+                    wave[i] *= (1 - i / sampleCount);
+                }
+                lastBeepTime = now;
             }
+            bananaBuffer.push(...wave);
         }
 
         const handleStart = (e) => {
@@ -119,10 +125,10 @@
             if (audioCtx.state === 'suspended') audioCtx.resume();
             
             isRecording = true;
-            bananaBuffer = []; // 録音のたびにリセット
+            bananaBuffer = [];
             recBtn.classList.add('recording');
             playBtn.classList.remove('ready-to-play');
-            msg.innerText = "バナナ化中...（話してください）";
+            msg.innerText = "バナナ化中...（声を出し続けて！）";
         };
 
         const handleStop = (e) => {
@@ -133,42 +139,29 @@
             
             if (bananaBuffer.length > 0) {
                 playBtn.classList.add('ready-to-play');
-                msg.innerText = "バナナ化完了！🍌をタップして再生";
-            } else {
-                msg.innerText = "声が録音されませんでした。";
+                msg.innerText = "バナナ化完了！🍌をタップ";
             }
         };
 
-        // 2. 再生処理（ここに全力を注ぎました）
         const playBanana = async (e) => {
             if (e) e.preventDefault();
             if (bananaBuffer.length === 0) return;
-            
-            // 再生前にコンテキストを再開（重要）
             if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-            // 録音したデータをバナナ風に加工して再生
             const buffer = audioCtx.createBuffer(1, bananaBuffer.length, audioCtx.sampleRate);
-            const channelData = buffer.getChannelData(0);
-            
-            for (let i = 0; i < bananaBuffer.length; i++) {
-                // 少しだけ音をザラつかせてバナナ感を出す
-                channelData[i] = bananaBuffer[i] * (Math.random() > 0.98 ? 0.5 : 1.2);
-            }
+            buffer.copyToChannel(new Float32Array(bananaBuffer), 0);
             
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
             
-            // 再生速度を少し上げて「バナナっぽい高い声」にする
-            source.playbackRate.value = 1.2; 
+            // 少しピッチを高くして滑稽にする
+            source.playbackRate.value = 1.3; 
             
             source.connect(audioCtx.destination);
             source.start(0);
-            msg.innerText = "バナナ語再生中...🍌";
+            msg.innerText = "🍌 バナナ語再生中 🍌";
             
-            source.onended = () => {
-                msg.innerText = "もう一度聴く？ 🍌をタップ。";
-            };
+            source.onended = () => { msg.innerText = "意味は消え、バナナだけが残りました。"; };
         };
 
         recBtn.addEventListener('pointerdown', handleStart);
