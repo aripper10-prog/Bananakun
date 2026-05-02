@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun - Fluent Mode 🍌</title>
+    <title>🍌 Bananakun - Hybrid Mode 🍌</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
         * { 
@@ -33,9 +33,10 @@
             position: absolute; bottom: 40px; color: var(--banana-brown); 
             text-align: center; width: 90%; min-height: 5em;
         }
-        .transcription { font-size: 0.9rem; opacity: 0.6; margin-bottom: 10px; font-style: italic; }
+        .transcription { font-size: 1rem; opacity: 0.5; margin-bottom: 10px; font-style: italic; }
         .banana-text { 
-            font-size: 2.2rem; font-weight: bold; color: var(--banana-brown);
+            font-size: 2.4rem; font-weight: bold; color: var(--banana-brown);
+            text-shadow: 2px 2px 0px rgba(255,255,255,0.5);
         }
     </style>
 </head>
@@ -53,7 +54,7 @@
     </div>
     
     <div id="msg" class="message">
-        <div id="trans-text" class="transcription"></div>
+        <div id="trans-text" class="transcription">🎤 長押しで真実を話す</div>
         <div id="banana-display" class="banana-text"></div>
     </div>
 
@@ -79,7 +80,7 @@
         }
 
         async function processBananakun(blob) {
-            transDisplay.innerText = "解析中...";
+            transDisplay.innerText = "侵食中...";
             bananaScript = "";
             try {
                 const response = await fetch('/api', { method: 'POST', body: blob });
@@ -109,6 +110,7 @@
             mediaRecorder.start();
             recBtn.classList.add('recording');
             bananaDisplay.innerText = "";
+            playBtn.classList.remove('ready-to-play');
         };
 
         const stopRec = () => { if (isRecording) { isRecording = false; mediaRecorder.stop(); recBtn.classList.remove('recording'); } };
@@ -121,17 +123,14 @@
             
             const audio = new Audio(URL.createObjectURL(originalAudioBlob));
             audio.onloadedmetadata = () => {
-                const duration = audio.duration; // 原音の秒数
-                
+                const duration = audio.duration;
                 const uttr = new SpeechSynthesisUtterance(bananaScript);
                 uttr.lang = 'ja-JP';
-                uttr.pitch = 1.6;
+                uttr.pitch = 1.4;
                 
-                // 【流暢さの鍵】原音の長さに合わせて話速を調整
-                // 日本語の平均的な発話速度を基準に、duration内に収まるrateを算出
-                // 1文字あたり約0.15秒と仮定して計算
-                const estimatedRate = (bananaScript.length * 0.15) / duration;
-                uttr.rate = Math.max(0.5, Math.min(3.0, estimatedRate)); 
+                // 原音の長さに合わせた流暢な速度計算
+                const rate = (bananaScript.length * 0.2) / duration;
+                uttr.rate = Math.max(0.6, Math.min(2.5, rate)); 
 
                 bananaDisplay.innerText = bananaScript;
                 window.speechSynthesis.speak(uttr);
