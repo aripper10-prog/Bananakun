@@ -3,162 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v4 - Pure Banana 🍌</title>
+    <title>🍌 Bananakun v4.1 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
-        :root {
-            --banana-skin: #fadb14;
-            --banana-brown: #6f4e37;
-        }
-
+        :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
         body {
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
-            font-family: 'Courier New', Courier, monospace;
-            overflow: hidden;
-            user-select: none;
+            margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
+            font-family: sans-serif; overflow: hidden; user-select: none;
         }
-
-        .controls {
-            display: flex;
-            gap: 50px;
-            z-index: 10;
-        }
-
-        .btn-wrapper {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-        }
-
         .circle-btn {
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            border: 8px solid var(--banana-brown);
-            background: white;
-            box-shadow: 0 10px 0 var(--banana-brown);
-            font-size: 5rem;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: all 0.1s;
-            touch-action: manipulation;
+            width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
+            background: white; font-size: 5rem; cursor: pointer; transition: all 0.1s; touch-action: manipulation;
         }
-
-        @keyframes shake {
-            0% { transform: rotate(0deg); }
-            50% { transform: rotate(5deg); }
-            100% { transform: rotate(-5deg); }
-        }
-        .recording { animation: shake 0.1s infinite; background: #ffeb3b; }
-        .playing { animation: shake 0.3s infinite; }
-
-        .label { font-weight: bold; color: var(--banana-brown); }
+        .recording { background: #ffeb3b; transform: scale(1.1); border-color: red; }
+        .label { font-weight: bold; color: var(--banana-brown); margin-top: 10px; }
         .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.8rem; }
     </style>
 </head>
 <body>
 
-    <div class="controls">
-        <div class="btn-wrapper">
+    <div style="display: flex; gap: 40px;">
+        <div style="text-align: center;">
             <button id="rec-btn" class="circle-btn">🎤</button>
-            <span class="label">TRANSFORM</span>
+            <div class="label">TRANSFORM</div>
         </div>
-        <div class="btn-wrapper">
+        <div style="text-align: center;">
             <button id="play-btn" class="circle-btn">🍌</button>
-            <span class="label">LISTEN</span>
+            <div class="label">LISTEN</div>
         </div>
     </div>
 
-    <div class="message">これは事実ではなく、ただのバナナです</div>
+    <div class="message">タップしてマイクを許可してください</div>
 
     <script>
-        let mic, analyzer, recorder, player;
-        let synth, loop, recordedBlob;
+        let mic, analyzer, recorder, player, synth, loop;
         let isInitialized = false;
 
-        async function init() {
-            await Tone.start();
-            
-            // マイク入力と解析
-            mic = new Tone.UserMedia();
-            analyzer = new Tone.Follower(0.1);
-            mic.connect(analyzer);
+        // マイクとオーディオの初期化
+        async function startSystem() {
+            try {
+                await Tone.start();
+                console.log("Audio Context Started");
 
-            // バナナの声を生成するシンセ
-            // 矩形波にモジュレーションをかけて「バ」に近いアタックを出す
-            synth = new Tone.MonoSynth({
-                oscillator: { type: "square8" },
-                envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 },
-                filterEnvelope: { attack: 0.01, baseFrequency: 200, octaves: 4 }
-            }).toDestination();
+                mic = new Tone.UserMedia();
+                await mic.open(); // ここでポップアップが出るはずです
+                
+                analyzer = new Tone.Follower(0.1);
+                mic.connect(analyzer);
 
-            // 加工用のエフェクト
-            const pitchShift = new Tone.PitchShift(12).toDestination();
-            const reverb = new Tone.Reverb(2).toDestination();
-            synth.connect(pitchShift);
-            synth.connect(reverb);
+                synth = new Tone.MonoSynth({
+                    oscillator: { type: "square8" },
+                    envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
+                }).toDestination();
 
-            // 録音先
-            recorder = new Tone.Recorder();
-            synth.connect(recorder);
+                const pitchShift = new Tone.PitchShift(12).toDestination();
+                synth.connect(pitchShift);
 
-            await mic.open();
-            isInitialized = true;
+                recorder = new Tone.Recorder();
+                synth.connect(recorder);
+
+                isInitialized = true;
+                document.querySelector('.message').innerText = "準備完了。🎤を押しながら話して。";
+            } catch (e) {
+                console.error("マイクの起動に失敗しました:", e);
+                alert("マイクの使用を許可してください。");
+            }
         }
 
-        // あなたの声の大きさに反応して「バナナ」と鳴らすループ
-        function startBananaLoop() {
-            loop = new Tone.Loop(time => {
-                const volume = analyzer.value;
-                // 声がある程度の大きさ以上の時だけ鳴らす
-                if (volume > 0.05) {
-                    // バナナの鳴き声（ランダムなピッチで「バナナ感」を出す）
-                    const notes = ["C5", "D5", "E5", "G5"];
-                    const note = notes[Math.floor(Math.random() * notes.length)];
-                    synth.triggerAttackRelease(note, "16n", time);
-                }
-            }, "8n").start(0);
-            Tone.Transport.start();
-        }
+        const recBtn = document.getElementById('rec-btn');
+        const playBtn = document.getElementById('play-btn');
 
-        const startRec = async () => {
-            if (!isInitialized) await init();
-            recBtn.classList.add('recording');
-            startBananaLoop();
-            recorder.start();
-        };
+        // 録音開始
+        recBtn.addEventListener('mousedown', async () => {
+            if (!isInitialized) {
+                await startSystem();
+            }
+            if (isInitialized) {
+                recBtn.classList.add('recording');
+                recorder.start();
+                loop = new Tone.Loop(time => {
+                    if (analyzer.value > 0.05) {
+                        const notes = ["C5", "D5", "E5", "G5"];
+                        synth.triggerAttackRelease(notes[Math.floor(Math.random()*4)], "16n", time);
+                    }
+                }, "8n").start(0);
+                Tone.Transport.start();
+            }
+        });
 
+        // 録音終了
         const stopRec = async () => {
-            recBtn.classList.remove('recording');
-            if (loop) {
+            if (isInitialized && recorder.state === "started") {
+                recBtn.classList.remove('recording');
                 loop.stop();
                 Tone.Transport.stop();
+                const blob = await recorder.stop();
+                const url = URL.createObjectURL(blob);
+                player = new Tone.Player(url).toDestination();
             }
-            const blob = await recorder.stop();
-            const url = URL.createObjectURL(blob);
-            player = new Tone.Player(url).toDestination();
-            player.onstop = () => playBtn.classList.remove('playing');
         };
 
-        recBtn.addEventListener('mousedown', startRec);
         window.addEventListener('mouseup', stopRec);
-        recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRec(); });
+        // スマホ用
+        recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); recBtn.dispatchEvent(new Event('mousedown')); });
         recBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRec(); });
 
         playBtn.addEventListener('click', () => {
-            if (player) {
-                playBtn.classList.add('playing');
-                player.start();
-            }
+            if (player) player.start();
         });
     </script>
 </body>
