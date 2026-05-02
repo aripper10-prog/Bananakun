@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v5.4 - Final 🍌</title>
+    <title>🍌 Bananakun v5.5 - Realtime Memory 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
@@ -13,50 +13,39 @@
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; overflow: hidden; touch-action: none;
         }
-        .controls { display: flex; gap: 40px; z-index: 10; }
-        .btn-container { position: relative; width: 140px; height: 140px; }
-        .gauge-svg { position: absolute; top: -10px; left: -10px; width: 160px; height: 160px; transform: rotate(-90deg); pointer-events: none; }
-        .gauge-bg { fill: none; stroke: rgba(0,0,0,0.1); stroke-width: 8; }
-        .gauge-bar { fill: none; stroke: var(--banana-brown); stroke-width: 8; stroke-dasharray: 440; stroke-dashoffset: 440; stroke-linecap: round; }
+        .controls { display: flex; gap: 40px; }
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer; box-shadow: 0 8px 0 var(--banana-brown);
-            display: flex; justify-content: center; align-items: center; outline: none; position: relative; z-index: 5;
+            display: flex; justify-content: center; align-items: center; outline: none; transition: all 0.1s;
         }
-        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; }
+        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.05); }
         .ready-to-play { box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
         .label { font-weight: bold; color: var(--banana-brown); margin-top: 15px; text-align: center; }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.85rem; text-align: center; width: 85%; background: rgba(255,255,255,0.4); padding: 10px; border-radius: 10px; min-height: 2.5em; }
+        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; }
     </style>
 </head>
 <body>
     <div class="controls">
         <div style="text-align: center;">
-            <div class="btn-container">
-                <svg class="gauge-svg"><circle class="gauge-bg" cx="80" cy="80" r="70"></circle><circle id="gauge-bar" class="gauge-bar" cx="80" cy="80" r="70"></circle></svg>
-                <button id="rec-btn" class="circle-btn">🎤</button>
-            </div>
+            <button id="rec-btn" class="circle-btn">🎤</button>
             <div class="label">TRANSFORM</div>
         </div>
         <div style="text-align: center;">
-            <div class="btn-container">
-                <button id="play-btn" class="circle-btn">🍌</button>
-            </div>
+            <button id="play-btn" class="circle-btn">🍌</button>
             <div class="label">LISTEN</div>
         </div>
     </div>
-    <div id="msg" class="message">🎤を長押ししてバナナ化開始</div>
+    <div id="msg" class="message">🎤を長押ししてバナナ化</div>
 
     <script>
-        let mic, analyzer, recorder, synth, loop;
-        let audioTag = new Audio();
+        let mic, analyzer, synth, loop;
         let isInitialized = false;
-        let recordStartTime, gaugeInterval;
-        const MAX_REC_TIME = 5000;
-        
+        let bananaBuffer = []; // 音を溜める配列
+        let sampleRate;
+
         const msg = document.getElementById('msg');
-        const gaugeBar = document.getElementById('gauge-bar');
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
 
@@ -65,53 +54,51 @@
                 await Tone.start();
                 mic = new Tone.UserMedia();
                 await mic.open();
-                
+                sampleRate = Tone.getContext().sampleRate;
+
                 analyzer = new Tone.Follower(0.1);
                 mic.connect(analyzer);
-                
+
                 synth = new Tone.MonoSynth({
                     oscillator: { type: "square8" },
                     envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
-                }).toDestination();
+                });
+
+                // シンセの音を直接配列に記録するためのプロセッサ
+                const processor = Tone.getContext().createScriptProcessor(4096, 1, 1);
+                processor.onaudioprocess = (e) => {
+                    if (recBtn.classList.contains('recording')) {
+                        const input = e.inputBuffer.getChannelData(0);
+                        // 録音中なら配列にコピー
+                        bananaBuffer.push(...input);
+                    }
+                };
+
+                const pShift = new Tone.PitchShift(13);
+                const reverb = new Tone.Reverb(1.5);
                 
-                const pShift = new Tone.PitchShift(13).toDestination();
-                const reverb = new Tone.Reverb(2).toDestination();
-                synth.connect(pShift);
-                synth.connect(reverb);
-                
-                // ブラウザが対応しているMIMEタイプを選択
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-                recorder = new Tone.Recorder({ mimeType });
-                
-                synth.connect(recorder);
+                synth.chain(pShift, reverb, Tone.Destination);
+                synth.connect(processor);
+                processor.connect(Tone.getContext().destination);
+
                 isInitialized = true;
-                msg.innerText = "準備完了。🎤を押して。";
+                msg.innerText = "準備完了。🎤を押して話して。";
             } catch (e) {
                 msg.innerText = "マイクの使用を許可してください";
-                console.error(e);
             }
         }
 
         const handleStart = async (e) => {
             if (e) e.preventDefault();
             if (!isInitialized) await init();
-            if (isInitialized && recorder.state !== "started") {
+            if (isInitialized) {
+                bananaBuffer = []; // 配列をリセット
                 recBtn.classList.add('recording');
                 playBtn.classList.remove('ready-to-play');
-                gaugeBar.style.strokeDashoffset = 440;
-                recordStartTime = Date.now();
                 
-                gaugeInterval = setInterval(() => {
-                    const progress = Math.min((Date.now() - recordStartTime) / MAX_REC_TIME, 1);
-                    gaugeBar.style.strokeDashoffset = 440 - (progress * 440);
-                    if (progress >= 1) handleStop();
-                }, 50);
-                
-                recorder.start();
                 loop = new Tone.Loop(t => {
                     if (analyzer.value > 0.02) {
-                        const notes = ["C5","E5","G5","A5"];
-                        synth.triggerAttackRelease(notes[Math.floor(Math.random()*notes.length)], "16n", t);
+                        synth.triggerAttackRelease(["C5","E5","G5","A5"][Math.floor(Math.random()*4)], "16n", t);
                     }
                 }, "8n").start(0);
                 Tone.Transport.start();
@@ -119,54 +106,43 @@
             }
         };
 
-        const handleStop = async (e) => {
+        const handleStop = (e) => {
             if (e) e.preventDefault();
-            if (isInitialized && recorder.state === "started") {
-                clearInterval(gaugeInterval);
+            if (recBtn.classList.contains('recording')) {
                 recBtn.classList.remove('recording');
                 if (loop) loop.stop();
                 Tone.Transport.stop();
                 
-                msg.innerText = "バナナを固定中...";
-                try {
-                    const blob = await recorder.stop();
-                    const url = URL.createObjectURL(blob);
-                    
-                    audioTag.pause();
-                    audioTag.src = url;
-                    audioTag.load();
-                    
-                    // 読み込み完了を待つ
-                    audioTag.oncanplaythrough = () => {
-                        playBtn.classList.add('ready-to-play');
-                        msg.innerText = "バナナ化完了！🍌をタップ。";
-                    };
-                } catch (err) {
-                    msg.innerText = "生成失敗。もう一度試して。";
+                if (bananaBuffer.length > 0) {
+                    playBtn.classList.add('ready-to-play');
+                    msg.innerText = "バナナ化完了！🍌をタップ。";
+                } else {
+                    msg.innerText = "音が録れませんでした。もう一度。";
                 }
             }
         };
 
         const playBanana = async (e) => {
             if (e) e.preventDefault();
-            try {
-                await Tone.start(); // 再生直前にオーディオコンテキストを再開
-                if (audioTag.src) {
-                    audioTag.currentTime = 0;
-                    await audioTag.play();
-                }
-            } catch (err) {
-                msg.innerText = "再生エラー。もう一度録音して。";
-            }
+            if (bananaBuffer.length === 0) return;
+
+            await Tone.start();
+            // 配列から直接オーディオバッファを作成（超高速）
+            const buffer = Tone.getContext().createBuffer(1, bananaBuffer.length, sampleRate);
+            buffer.copyToChannel(new Float32Array(bananaBuffer), 0);
+            
+            const source = Tone.getContext().createBufferSource();
+            source.buffer = buffer;
+            source.connect(Tone.getContext().destination);
+            source.start();
         };
 
         recBtn.addEventListener('mousedown', handleStart);
         window.addEventListener('mouseup', handleStop);
         recBtn.addEventListener('touchstart', handleStart, {passive: false});
         recBtn.addEventListener('touchend', handleStop, {passive: false});
-        
-        playBtn.addEventListener('click', playBanana);
         playBtn.addEventListener('touchstart', playBanana, {passive: false});
+        playBtn.addEventListener('click', playBanana);
     </script>
 </body>
 </html>
