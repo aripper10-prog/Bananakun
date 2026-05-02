@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v5.7 🍌</title>
+    <title>🍌 Bananakun v5.8 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
@@ -13,20 +13,39 @@
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; overflow: hidden; touch-action: none;
         }
+
+        /* 起動オーバーレイ */
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--banana-skin); z-index: 100;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        #start-btn {
+            padding: 20px 40px; font-size: 1.5rem; font-weight: bold;
+            background: white; border: 4px solid var(--banana-brown);
+            border-radius: 50px; color: var(--banana-brown); cursor: pointer;
+        }
+
         .controls { display: flex; gap: 40px; }
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer; box-shadow: 0 8px 0 var(--banana-brown);
-            display: flex; justify-content: center; align-items: center; outline: none; transition: all 0.1s;
+            display: flex; justify-content: center; align-items: center; outline: none;
         }
         .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.05); }
         .ready-to-play { box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 1s infinite; }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
         .label { font-weight: bold; color: var(--banana-brown); margin-top: 15px; text-align: center; }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; padding: 10px; background: rgba(255,255,255,0.4); border-radius: 10px; min-height: 1.2em; }
+        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; padding: 10px; background: rgba(255,255,255,0.4); border-radius: 10px; }
     </style>
 </head>
 <body>
+
+    <div id="overlay">
+        <button id="start-btn">バナナを起動する 🍌</button>
+        <p style="margin-top:20px; color:var(--banana-brown);">タップしてマイクを許可してください</p>
+    </div>
+
     <div class="controls">
         <div style="text-align: center;">
             <button id="rec-btn" class="circle-btn">🎤</button>
@@ -37,76 +56,59 @@
             <div class="label">LISTEN</div>
         </div>
     </div>
-    <div id="msg" class="message">🎤をタップして開始</div>
+    <div id="msg" class="message">🎤を長押ししてバナナ化</div>
 
     <script>
         let mic, analyzer, synth, loop, processor;
-        let isInitialized = false;
         let bananaBuffer = [];
         let sampleRate;
 
+        const overlay = document.getElementById('overlay');
+        const startBtn = document.getElementById('start-btn');
         const msg = document.getElementById('msg');
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
 
-        async function tryInit() {
+        // 1. 最初のタップで全てを初期化
+        startBtn.addEventListener('click', async () => {
             try {
-                msg.innerText = "マイクを起動中...";
                 await Tone.start();
+                mic = new Tone.UserMedia();
+                await mic.open(); // ここで許可ダイアログが出る
                 
-                if (!mic) {
-                    mic = new Tone.UserMedia();
-                }
-                
-                // 既に開いている場合は一旦閉じる（クリーンアップ）
-                if (mic.state === "opened") { await mic.close(); }
-                
-                await mic.open();
-                
-                // 成功後の処理
+                // 許可が取れたらシステム構築
                 sampleRate = Tone.getContext().sampleRate;
                 analyzer = new Tone.Follower(0.1);
                 mic.connect(analyzer);
 
-                if (!synth) {
-                    synth = new Tone.MonoSynth({
-                        oscillator: { type: "square8" },
-                        envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
-                    });
-                    const pShift = new Tone.PitchShift(13);
-                    const reverb = new Tone.Reverb(1.5);
-                    synth.chain(pShift, reverb, Tone.Destination);
-                }
+                synth = new Tone.MonoSynth({
+                    oscillator: { type: "square8" },
+                    envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
+                });
 
-                if (!processor) {
-                    processor = Tone.getContext().createScriptProcessor(4096, 1, 1);
-                    processor.onaudioprocess = (e) => {
-                        if (recBtn.classList.contains('recording')) {
-                            bananaBuffer.push(...e.inputBuffer.getChannelData(0));
-                        }
-                    };
-                    synth.connect(processor);
-                    processor.connect(Tone.getContext().destination);
-                }
+                const pShift = new Tone.PitchShift(13);
+                const reverb = new Tone.Reverb(1.5);
+                synth.chain(pShift, reverb, Tone.Destination);
 
-                isInitialized = true;
-                msg.innerText = "準備完了！🎤を長押しして話して。";
-                return true;
+                processor = Tone.getContext().createScriptProcessor(4096, 1, 1);
+                processor.onaudioprocess = (e) => {
+                    if (recBtn.classList.contains('recording')) {
+                        bananaBuffer.push(...e.inputBuffer.getChannelData(0));
+                    }
+                };
+                synth.connect(processor);
+                processor.connect(Tone.getContext().destination);
+
+                overlay.style.display = 'none'; // 成功したら消す
+                msg.innerText = "準備完了！🎤を長押し。";
             } catch (e) {
-                msg.innerText = "マイクが拒否されました。もう一度🎤を叩いて。";
-                console.error(e);
-                return false;
+                alert("マイクを許可して、ページを更新してください。");
             }
-        }
+        });
 
-        const handleStart = async (e) => {
+        // 2. 録音処理
+        const handleStart = (e) => {
             if (e) e.preventDefault();
-            
-            // 状態に関わらず、押されるたびにマイクチェック
-            const success = await tryInit();
-            if (!success) return;
-
-            // 録音開始
             bananaBuffer = [];
             recBtn.classList.add('recording');
             playBtn.classList.remove('ready-to-play');
@@ -130,8 +132,6 @@
                 if (bananaBuffer.length > 0) {
                     playBtn.classList.add('ready-to-play');
                     msg.innerText = "バナナ化完了！🍌をタップ。";
-                } else {
-                    msg.innerText = "声が届いていません。もっと近くで話して。";
                 }
             }
         };
@@ -139,10 +139,7 @@
         const playBanana = async (e) => {
             if (e) e.preventDefault();
             await Tone.start();
-            if (bananaBuffer.length === 0) {
-                await tryInit();
-                return;
-            }
+            if (bananaBuffer.length === 0) return;
 
             const buffer = Tone.getContext().createBuffer(1, bananaBuffer.length, sampleRate);
             buffer.copyToChannel(new Float32Array(bananaBuffer), 0);
@@ -153,10 +150,8 @@
             source.start();
         };
 
-        // イベントをpointer系に統合して反応を安定させる
         recBtn.addEventListener('pointerdown', handleStart);
         window.addEventListener('pointerup', handleStop);
-        
         playBtn.addEventListener('pointerdown', playBanana);
     </script>
 </body>
