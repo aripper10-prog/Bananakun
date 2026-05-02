@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v5.9 - Force Access 🍌</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <title>🍌 Bananakun v6.0 - Direct Stream 🍌</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
         * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -13,7 +12,6 @@
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; overflow: hidden; touch-action: none;
         }
-
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--banana-skin); z-index: 100;
@@ -25,8 +23,6 @@
             border-radius: 60px; color: var(--banana-brown); cursor: pointer;
             box-shadow: 0 10px 0 var(--banana-brown);
         }
-        #start-btn:active { transform: translateY(5px); box-shadow: 0 5px 0 var(--banana-brown); }
-
         .controls { display: flex; gap: 40px; }
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
@@ -36,126 +32,138 @@
         .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.05); }
         .ready-to-play { box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 1s infinite; }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-        .label { font-weight: bold; color: var(--banana-brown); margin-top: 15px; text-align: center; }
         .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; padding: 10px; background: rgba(255,255,255,0.4); border-radius: 10px; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <button id="start-btn">マイクの封印を解く 🍌</button>
-        <p id="hint" style="margin-top:20px; color:var(--banana-brown); text-align:center;">許可ポップアップが出たら<br>必ず「許可」を押してください</p>
+        <button id="start-btn">バナナを接続する 🍌</button>
     </div>
 
     <div class="controls">
         <div style="text-align: center;">
             <button id="rec-btn" class="circle-btn">🎤</button>
-            <div class="label">TRANSFORM</div>
+            <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">TRANSFORM</div>
         </div>
         <div style="text-align: center;">
             <button id="play-btn" class="circle-btn">🍌</button>
-            <div class="label">LISTEN</div>
+            <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">LISTEN</div>
         </div>
     </div>
-    <div id="msg" class="message">🎤を長押ししてバナナ化</div>
+    <div id="msg" class="message">🎤を長押しして開始</div>
 
     <script>
-        let micSource, analyzer, synth, loop, processor;
-        let bananaBuffer = [];
-        let sampleRate;
+        let audioCtx, micStream, analyzer, synthOsc, bananaBuffer = [];
+        let isRecording = false;
 
-        const overlay = document.getElementById('overlay');
         const startBtn = document.getElementById('start-btn');
-        const msg = document.getElementById('msg');
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
+        const msg = document.getElementById('msg');
 
-        async function bootSystem() {
+        // 1. システム起動（もっとも原始的な方法でマイクを掴む）
+        startBtn.onclick = async () => {
             try {
-                // 1. AudioContextを明示的に開始
-                await Tone.start();
-                const ctx = Tone.getContext();
-                sampleRate = ctx.sampleRate;
-
-                // 2. ブラウザ標準APIでマイクを奪い取る
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micStream = audioCtx.createMediaStreamSource(stream);
                 
-                // 3. マイクをTone.jsの回路に流し込む
-                micSource = ctx.createMediaStreamSource(stream);
-                analyzer = ctx.createFollower(0.1);
-                micSource.connect(analyzer);
-
-                // シンセとエフェクトの構築
-                synth = new Tone.MonoSynth({
-                    oscillator: { type: "square8" },
-                    envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
-                });
-                const pShift = new Tone.PitchShift(13);
-                const reverb = new Tone.Reverb(1.5);
-                synth.chain(pShift, reverb, Tone.Destination);
+                // 音量解析用
+                analyzer = audioCtx.createAnalyser();
+                analyzer.fftSize = 256;
+                micStream.connect(analyzer);
 
                 // 録音用プロセッサ
-                processor = ctx.createScriptProcessor(4096, 1, 1);
+                const processor = audioCtx.createScriptProcessor(4096, 1, 1);
                 processor.onaudioprocess = (e) => {
-                    if (recBtn.classList.contains('recording')) {
-                        bananaBuffer.push(...e.inputBuffer.getChannelData(0));
+                    if (isRecording) {
+                        // 録音中、何らかの音が鳴っていればバッファに貯める
+                        const data = e.inputBuffer.getChannelData(0);
+                        bananaBuffer.push(...new Float32Array(data));
                     }
                 };
-                synth.connect(processor);
-                processor.connect(ctx.destination);
+                processor.connect(audioCtx.destination);
 
-                // 成功したら画面を切り替え
-                overlay.style.display = 'none';
-                msg.innerText = "準備完了！🎤を長押し。";
-            } catch (err) {
-                console.error(err);
-                startBtn.innerText = "もう一度試す 🍌";
-                document.getElementById('hint').innerText = "エラー: 許可ボタンを押した後、\nもう一度ここをタップしてください。";
+                document.getElementById('overlay').style.display = 'none';
+                msg.innerText = "接続成功。🎤を長押しして話して。";
+            } catch (e) {
+                alert("マイクへのアクセスが拒否されました。設定を確認してください。");
             }
+        };
+
+        // 2. バナナシンセ（録音中に鳴らす音）
+        function playBananaNote() {
+            if (!audioCtx || !isRecording) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'square';
+            // 高いピッチでバナナ感を出す
+            osc.frequency.setValueAtTime(800 + Math.random() * 1000, audioCtx.currentTime);
+            
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
         }
 
-        startBtn.addEventListener('click', bootSystem);
+        // 3. 録音ループ
+        function recordingLoop() {
+            if (!isRecording) return;
+            
+            const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+            analyzer.getByteFrequencyData(dataArray);
+            const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+
+            if (volume > 30) { // 声を検知
+                playBananaNote();
+            }
+            requestAnimationFrame(recordingLoop);
+        }
 
         const handleStart = (e) => {
             if (e) e.preventDefault();
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            isRecording = true;
             bananaBuffer = [];
             recBtn.classList.add('recording');
             playBtn.classList.remove('ready-to-play');
-            
-            loop = new Tone.Loop(t => {
-                // analyzer.valueはTone.Followerのもの。
-                // 0.01以上（小声）でバナナ化
-                if (analyzer.value > 0.01) {
-                    synth.triggerAttackRelease(["C5","E5","G5","A5"][Math.floor(Math.random()*4)], "16n", t);
-                }
-            }, "8n").start(0);
-            Tone.Transport.start();
+            recordingLoop();
         };
 
         const handleStop = (e) => {
             if (e) e.preventDefault();
-            if (recBtn.classList.contains('recording')) {
-                recBtn.classList.remove('recording');
-                if (loop) loop.stop();
-                Tone.Transport.stop();
-                if (bananaBuffer.length > 0) playBtn.classList.add('ready-to-play');
+            isRecording = false;
+            recBtn.classList.remove('recording');
+            if (bananaBuffer.length > 0) {
+                playBtn.classList.add('ready-to-play');
+                msg.innerText = "バナナ化完了。🍌をタップ。";
             }
         };
 
-        const playBanana = async (e) => {
-            if (e) e.preventDefault();
+        // 4. 再生
+        playBtn.onclick = () => {
             if (bananaBuffer.length === 0) return;
-            const buffer = Tone.getContext().createBuffer(1, bananaBuffer.length, sampleRate);
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const buffer = audioCtx.createBuffer(1, bananaBuffer.length, audioCtx.sampleRate);
             buffer.copyToChannel(new Float32Array(bananaBuffer), 0);
-            const source = Tone.getContext().createBufferSource();
+            
+            const source = audioCtx.createBufferSource();
             source.buffer = buffer;
-            source.connect(Tone.getContext().destination);
+            source.connect(audioCtx.destination);
             source.start();
         };
 
         recBtn.addEventListener('pointerdown', handleStart);
         window.addEventListener('pointerup', handleStop);
-        playBtn.addEventListener('pointerdown', playBanana);
     </script>
 </body>
 </html>
