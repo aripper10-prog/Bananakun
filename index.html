@@ -3,27 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun Sync Pro - Meta 🍌</title>
+    <title>🍌 Bananakun - Transcription Sync 🍌</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
-        
-        /* UIガード：青い選択、ズーム、タップの影を徹底排除 */
         * { 
             -webkit-tap-highlight-color: transparent; 
-            user-select: none; 
-            -webkit-user-select: none;
-            touch-action: none;
-            box-sizing: border-box; 
+            user-select: none; -webkit-user-select: none;
+            touch-action: none; box-sizing: border-box; 
         }
-
         body {
             margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; overflow: hidden;
         }
-
         .controls { display: flex; gap: 40px; z-index: 10; }
-
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer; 
@@ -31,45 +24,21 @@
             display: flex; justify-content: center; align-items: center; 
             outline: none; transition: 0.1s;
         }
-
-        .circle-btn:active {
-            transform: translateY(4px);
-            box-shadow: 0 4px 0 var(--banana-brown);
-        }
-
-        .recording { 
-            background: #ffeb3b !important; 
-            border-color: #ff4444 !important; 
-            transform: scale(1.1) !important; 
-        }
-
-        .ready-to-play { 
-            box-shadow: 0 0 50px #fff, 0 8px 0 var(--banana-brown) !important; 
-            animation: pulse 0.8s infinite; 
-        }
-
-        @keyframes pulse { 
-            0%, 100% { transform: scale(1); } 
-            50% { transform: scale(1.08); } 
-        }
-
+        .circle-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--banana-brown); }
+        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.1) !important; }
+        .ready-to-play { box-shadow: 0 0 50px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 0.8s infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+        
         .message { 
             position: absolute; bottom: 40px; color: var(--banana-brown); 
-            font-size: 1.6rem; font-weight: bold; text-align: center; 
-            width: 90%; min-height: 4em; display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start;
+            text-align: center; width: 90%; min-height: 5em;
         }
-
-        .char-pop { 
-            display: inline-block; 
-            animation: pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
-            color: var(--banana-brown); 
-            margin: 2px;
+        .transcription { font-size: 0.9rem; opacity: 0.6; margin-bottom: 10px; font-style: italic; }
+        .banana-text { 
+            font-size: 1.8rem; font-weight: bold; display: flex; flex-wrap: wrap; justify-content: center; 
         }
-
-        @keyframes pop { 
-            0% { transform: scale(0); opacity: 0; } 
-            100% { transform: scale(1.2); opacity: 1; } 
-        }
+        .char-pop { display: inline-block; animation: pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); margin: 2px; }
+        @keyframes pop { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1.2); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -85,17 +54,22 @@
         </div>
     </div>
     
-    <div id="msg" class="message"></div>
+    <div id="msg" class="message">
+        <div id="trans-text" class="transcription"></div>
+        <div id="banana-display" class="banana-text"></div>
+    </div>
 
     <script>
         let mediaRecorder, audioChunks = [];
         let bananaScript = "";
+        let originalText = "";
         let originalAudioBlob = null;
         let isRecording = false;
 
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
-        const msg = document.getElementById('msg');
+        const transDisplay = document.getElementById('trans-text');
+        const bananaDisplay = document.getElementById('banana-display');
 
         async function initRecorder() {
             try {
@@ -104,89 +78,78 @@
                 mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
                 mediaRecorder.onstop = async () => {
                     originalAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    await sendToGemini(originalAudioBlob);
+                    await processBananakun(originalAudioBlob);
                 };
             } catch (e) {
-                msg.innerText = "マイクの使用を許可してください";
+                transDisplay.innerText = "マイク許可が必要です";
             }
         }
 
-        async function sendToGemini(blob) {
-            msg.innerText = "🍌...";
+        async function processBananakun(blob) {
+            transDisplay.innerText = "解析中...";
+            bananaDisplay.innerHTML = "";
             bananaScript = "";
+
             try {
                 const response = await fetch('/api', { method: 'POST', body: blob });
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
+                
+                let rawOutput = "";
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-                    bananaScript += decoder.decode(value);
+                    rawOutput += decoder.decode(value);
                 }
+
+                // AIからの出力を解析（例: "原文: おれはばかだ | [L]バ[L]ナ[H]ナ..."）
+                // サーバー側のプロンプトでこの形式を指定する必要があります
+                const parts = rawOutput.split('|');
+                originalText = parts[0] ? parts[0].replace("原文:", "").trim() : "";
+                bananaScript = parts[1] ? parts[1].trim() : rawOutput;
+
+                transDisplay.innerText = `「${originalText}」`;
                 playBtn.classList.add('ready-to-play');
-                msg.innerText = "🍌 READY";
+                bananaDisplay.innerText = "🍌 READY";
             } catch (e) {
-                msg.innerText = "ERROR";
+                transDisplay.innerText = "エラーが発生しました";
             }
         }
 
         recBtn.onpointerdown = async (e) => {
             e.preventDefault();
             if (!mediaRecorder) await initRecorder();
-            if (mediaRecorder && mediaRecorder.state === 'inactive') {
+            if (mediaRecorder.state === 'inactive') {
                 audioChunks = [];
                 isRecording = true;
                 mediaRecorder.start();
                 recBtn.classList.add('recording');
-                msg.innerHTML = "";
+                transDisplay.innerText = "録音中...";
+                bananaDisplay.innerHTML = "";
                 playBtn.classList.remove('ready-to-play');
             }
         };
 
-        const stopRecording = () => {
-            if (isRecording) {
-                isRecording = false;
-                mediaRecorder.stop();
-                recBtn.classList.remove('recording');
-            }
-        };
+        const stopRec = () => { if (isRecording) { isRecording = false; mediaRecorder.stop(); recBtn.classList.remove('recording'); } };
+        window.onpointerup = stopRec;
+        recBtn.onpointerleave = stopRec;
 
-        window.onpointerup = stopRecording;
-        recBtn.onpointerleave = stopRecording;
-
-        // メタデータ（ピッチタグ）解析と同期再生
         playBtn.onclick = async () => {
             if (!bananaScript || !originalAudioBlob) return;
-            
             window.speechSynthesis.cancel();
-            msg.innerHTML = "";
+            bananaDisplay.innerHTML = "";
 
-            // 正規表現で [H]バ などのタグと文字を抽出
             const pattern = /\[([HL])\]([バナ])|([ーッ！])/g;
             let match;
             const notes = [];
             while ((match = pattern.exec(bananaScript)) !== null) {
-                notes.push({
-                    type: match[1] || "L", 
-                    char: match[2] || match[3]
-                });
+                notes.push({ type: match[1] || "L", char: match[2] || match[3] });
             }
 
-            if (notes.length === 0) {
-                // タグがない場合のフォールバック
-                const chars = bananaScript.replace(/[\[\]HL\s\n]/g, "").split("");
-                chars.forEach(c => notes.push({type: "L", char: c}));
-            }
-
-            const audioUrl = URL.createObjectURL(originalAudioBlob);
-            const audio = new Audio(audioUrl);
-            
+            const audio = new Audio(URL.createObjectURL(originalAudioBlob));
             audio.onloadedmetadata = () => {
-                const totalDuration = audio.duration * 1000;
-                const interval = totalDuration / notes.length;
-
-                // 原音はミュート（長さの基準のみ）
-                audio.volume = 0;
+                const interval = (audio.duration * 1000) / (notes.length || 1);
+                audio.volume = 0; 
                 audio.play();
 
                 notes.forEach((note, i) => {
@@ -194,14 +157,13 @@
                         const span = document.createElement("span");
                         span.innerText = note.char;
                         span.className = "char-pop";
-                        msg.appendChild(span);
+                        bananaDisplay.appendChild(span);
 
                         if (/[バナ]/.test(note.char)) {
                             const uttr = new SpeechSynthesisUtterance(note.char);
                             uttr.lang = 'ja-JP';
-                            // Hなら高音(2.0)、Lなら低音(1.2)
-                            uttr.pitch = note.type === "H" ? 2.0 : 1.2;
-                            uttr.rate = 2.8; 
+                            uttr.pitch = note.type === "H" ? 2.2 : 1.1;
+                            uttr.rate = 3.0; 
                             window.speechSynthesis.speak(uttr);
                         }
                     }, i * interval);
