@@ -1,52 +1,21 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-export const config = {
-  api: { bodyParser: false },
-};
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  const genAI = new GoogleGenerativeAI(apiKey);
-
-  // リストにある正確なモデル名を使用
-  const model = genAI.getGenerativeModel({ 
-    model: "gemini-3.1-flash-lite-preview" 
-  });
-
-  try {
-    const chunks = [];
-    for await (const chunk of req) { chunks.push(chunk); }
-    const audioBuffer = Buffer.concat(chunks);
-
-    const prompt = "あなたは『ばなな君』です。音声のリズムを完璧に守り、全て『バ』『ナ』『ナ』の音節だけで構成されたカタカナ語に変換してください。";
-
-    // ストリーミング生成
-    const result = await model.generateContentStream([
-      { text: prompt },
-      {
-        inlineData: {
-          mimeType: "audio/webm",
-          data: audioBuffer.toString('base64')
-        }
-      }
-    ]);
-
-    res.writeHead(200, {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Transfer-Encoding': 'chunked',
-    });
-
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) res.write(text);
-    }
-    res.end();
-
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    // 404が出る場合のデバッグ用ログ
-    res.status(500).send(`Model Error: ${error.message}`);
-  }
-}
+    const prompt = `
+      【絶対命令：音声同期モード】
+      あなたは、入力された音声の「音節（シラブル）」を1つ残らず「バ」または「ナ」に置換する装置です。
+      
+      手順：
+      1. 入力音声の音節数（モーラ数）を正確にカウントしてください。
+      2. 「お・れ・は・ば・か・だ（7音節）」であれば、必ず7音節の「バナナ」の組み合わせを生成してください。
+      3. 音声のイントネーション（ピッチの上下）を、カタカナの表記で再現してください。
+         - 高い音、強調：カタカナ
+         - 低い音：カタカナ
+         - 伸びる音：長音符（ー）
+         - 詰まる音：促音（ッ）
+      
+      出力ルール：
+      - カタカナの「バ」「ナ」および「ー」「ッ」「！」「？」のみ使用。
+      - 漢字、ひらがな、アルファベット、解説は一切禁止。
+      - 例：「お・れ・は・ば・か・だ」→「バ・ナ・ナ・バ・ナ・ナ・バ！」
+      - 例：「ダメだ……」→「バ・ナ・ナ……」
+      
+      あなたの知能をすべて「音節の正確な一致」と「イントネーションの転写」に捧げてください。
+    `;
