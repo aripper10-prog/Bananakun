@@ -5,128 +5,129 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
     <title>自責感情解体ツール ばなな君</title>
     <style>
-        :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
-        
-        /* 基本は選択不可 */
+        :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; --accent-blue: #58a6ff; }
         * { 
             -webkit-tap-highlight-color: transparent; 
-            user-select: none; 
-            -webkit-user-select: none;
             box-sizing: border-box; 
         }
 
-        /* リンクやボタンなど、クリックが必要な要素だけ操作を許可 */
-        a, button, .support-box, .support-section {
-            touch-action: manipulation;
-            cursor: pointer;
-        }
-
         body {
-            margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
-            font-family: sans-serif; overflow: hidden; position: relative;
-            /* 背景での無駄なスクロールを防止 */
-            touch-action: none;
+            margin: 0; padding: 15px; display: flex; flex-direction: column; 
+            min-height: 100dvh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
+            font-family: sans-serif; color: var(--banana-brown); overflow-x: hidden;
+            position: relative;
         }
 
-        /* 中央上タイトル */
-        .title-container {
-            position: absolute; top: 30px; text-align: center; color: var(--banana-brown);
+        /* 画面全体のコンテナ */
+        .container {
+            width: 100%; max-width: 450px; margin: 0 auto;
+            display: flex; flex-direction: column; align-items: center;
+            flex-grow: 1;
         }
-        .title-sub { font-size: 0.9rem; font-weight: bold; display: block; margin-bottom: 2px; }
-        .title-main { font-size: 2.2rem; font-weight: bold; }
 
-        .controls { display: flex; gap: 40px; z-index: 10; margin-top: -40px; }
+        /* タイトルエリア（すてる君準拠） */
+        .title-area {
+            border-bottom: 1px solid rgba(111, 78, 55, 0.2);
+            margin-bottom: 20px; padding: 20px 0 10px 0; text-align: center; width: 100%;
+        }
+        .sub-title { font-size: 11px; font-weight: bold; letter-spacing: 1.5px; opacity: 0.8; }
+        .main-title { font-size: 28px; font-weight: bold; margin-top: 5px; }
+
+        /* メインUI */
+        .main-content {
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; width: 100%; gap: 40px; margin-bottom: 100px;
+        }
+
+        .controls { display: flex; gap: 40px; z-index: 10; }
+
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer; 
             box-shadow: 0 8px 0 var(--banana-brown);
             display: flex; justify-content: center; align-items: center; 
-            outline: none; transition: 0.1s;
-            touch-action: none; /* ボタン単体は長押し判定のため制御 */
+            outline: none; transition: 0.1s; touch-action: none;
         }
         .circle-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--banana-brown); }
-        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.1) !important; }
+        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.1); }
         .ready-to-play { box-shadow: 0 0 50px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 0.8s infinite; }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-        
-        .message { 
-            position: absolute; bottom: 180px; color: var(--banana-brown); 
-            text-align: center; width: 90%; min-height: 5em;
-        }
-        .transcription { font-size: 1rem; opacity: 0.5; margin-bottom: 10px; font-style: italic; }
-        .banana-text { font-size: 2.4rem; font-weight: bold; color: var(--banana-brown); }
 
-        /* 右下クレジット & リンク */
-        .footer-right {
-            position: absolute; bottom: 15px; right: 15px; text-align: right; 
-            color: var(--banana-brown); font-size: 0.75rem; line-height: 1.6;
-            z-index: 100;
-        }
-        /* リンクは選択（長押しコピー）も可能にする */
-        .footer-right a { 
-            color: var(--banana-brown); 
-            text-decoration: underline; 
-            -webkit-user-select: auto;
-            user-select: auto;
-        }
+        .message-area { text-align: center; width: 100%; min-height: 120px; }
+        .transcription { font-size: 14px; opacity: 0.6; font-style: italic; margin-bottom: 10px; min-height: 1.2em; }
+        .banana-display { font-size: 28px; font-weight: bold; line-height: 1.3; word-break: break-all; }
 
-        /* 開発応援ボタン & ボックス */
-        .support-section { position: absolute; bottom: 20px; left: 20px; z-index: 100; }
+        /* 応援セクション（すてる君準拠） */
+        .support-section { margin-top: 20px; text-align: center; width: 100%; z-index: 50; }
         .support-toggle-btn {
-            background: var(--banana-brown); color: white; border: none; padding: 8px 12px;
-            border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer;
+            background: none; border: 1px solid rgba(111, 78, 55, 0.3);
+            color: var(--banana-brown); padding: 8px 16px; border-radius: 20px;
+            font-size: 11px; cursor: pointer; transition: 0.3s; touch-action: manipulation;
         }
         .support-box {
-            position: absolute; bottom: 45px; left: 0; background: white; padding: 15px;
-            border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 220px; text-align: center;
+            background: white; border: 1px solid rgba(111, 78, 55, 0.2);
+            border-radius: 12px; padding: 20px; margin-top: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: none;
         }
-        .support-box p { margin: 0 0 10px 0; color: #333; }
-        .qr-wrapper img { width: 150px; height: 150px; margin-bottom: 10px; }
+        .qr-wrapper { background: white; padding: 5px; width: 140px; margin: 0 auto 15px auto; }
+        .qr-wrapper img { width: 100%; display: block; }
         .app-launch-btn {
-            display: inline-block; background: #ff0033; color: white; text-decoration: none;
-            padding: 8px 20px; border-radius: 20px; font-weight: bold; font-size: 13px;
+            display: block; background: #ff0033; color: white; text-decoration: none;
+            padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px; touch-action: manipulation;
         }
+
+        /* フッターリンク・コピーライト */
+        .footer-links { margin-top: auto; padding: 20px 0; text-align: center; width: 100%; }
+        .footer-links a { 
+            color: var(--banana-brown); font-size: 12px; text-decoration: underline; 
+            display: inline-block; margin: 5px 10px; touch-action: manipulation;
+        }
+        .copyright { font-size: 11px; opacity: 0.7; margin-top: 10px; }
+
     </style>
 </head>
 <body>
 
-    <div class="title-container">
-        <span class="title-sub">自責感情解体ツール</span>
-        <span class="title-main">ばなな君</span>
-    </div>
-
-    <div class="controls">
-        <div style="text-align: center;">
-            <button id="rec-btn" class="circle-btn">🎤</button>
-            <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">録音</div>
+    <div class="container">
+        <div class="title-area">
+            <div class="sub-title">自責感情解体ツール</div>
+            <div class="main-title">ばなな君</div>
         </div>
-        <div style="text-align: center;">
-            <button id="play-btn" class="circle-btn">🍌</button>
-            <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">バナナ化</div>
-        </div>
-    </div>
-    
-    <div id="msg" class="message">
-        <div id="trans-text" class="transcription">🎤 長押しで真実を話す</div>
-        <div id="banana-display" class="banana-text"></div>
-    </div>
 
-    <div class="support-section">
-        <div id="support-box" class="support-box" style="display: none;">
-            <p style="font-size: 13px; margin-bottom: 15px;">維持・運営を応援いただけると嬉しいです。</p>
-            <a href="https://qr.paypay.ne.jp/p2p01_TXcNu8RqltIo8qI4" target="_blank" rel="noopener noreferrer">
-                <div class="qr-wrapper"><img src="/support-qr.png" alt="QR" /></div>
-            </a>
-            <a href="https://qr.paypay.ne.jp/p2p01_TXcNu8RqltIo8qI4" target="_blank" rel="noopener noreferrer" class="app-launch-btn">PayPay起動</a>
-        </div>
-        <button id="support-toggle-btn" class="support-toggle-btn">📣 開発を応援する</button>
-    </div>
+        <div class="main-content">
+            <div class="controls">
+                <div style="text-align: center;">
+                    <button id="rec-btn" class="circle-btn">🎤</button>
+                    <div style="font-weight:bold; margin-top:15px;">録音</div>
+                </div>
+                <div style="text-align: center;">
+                    <button id="play-btn" class="circle-btn">🍌</button>
+                    <div style="font-weight:bold; margin-top:15px;">バナナ化</div>
+                </div>
+            </div>
 
-    <div class="footer-right">
-        <a href="https://x.com/Suterukun2026" target="_blank" rel="noopener noreferrer">X公式アカウント</a><br>
-        <a href="https://suterukun.vercel.app/" target="_blank" rel="noopener noreferrer">雑念除去支援システム すてる君</a><br>
-        &copy; <span id="year"></span> Suteru-kun Project
+            <div class="message-area">
+                <div id="trans-text" class="transcription">🎤 ボタンを長押しして話してください</div>
+                <div id="banana-display" class="banana-display"></div>
+            </div>
+
+            <div class="support-section">
+                <button id="support-toggle-btn" class="support-toggle-btn">📣 開発を応援する</button>
+                <div id="support-box" class="support-box">
+                    <p style="font-size: 13px; margin-bottom: 15px;">維持・運営を応援いただけると嬉しいです。</p>
+                    <a href="https://qr.paypay.ne.jp/p2p01_TXcNu8RqltIo8qI4" target="_blank" rel="noopener noreferrer">
+                        <div class="qr-wrapper"><img src="/support-qr.png" alt="QR"></div>
+                    </a>
+                    <a href="https://qr.paypay.ne.jp/p2p01_TXcNu8RqltIo8qI4" target="_blank" rel="noopener noreferrer" class="app-launch-btn">PayPay起動</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-links">
+            <a href="https://x.com/Suterukun2026" target="_blank" rel="noopener noreferrer">X公式アカウント</a>
+            <a href="https://suterukun.vercel.app/" target="_blank" rel="noopener noreferrer">雑念除去支援システム すてる君</a>
+            <div class="copyright">&copy; <span id="year"></span> Suteru-kun Project</div>
+        </div>
     </div>
 
     <script>
@@ -142,22 +143,28 @@
         const supportBox = document.getElementById('support-box');
         const supportToggleBtn = document.getElementById('support-toggle-btn');
 
+        // 西暦セット
         document.getElementById('year').innerText = new Date().getFullYear();
 
+        // 応援ボタン
         supportToggleBtn.onclick = () => {
-            const isHidden = supportBox.style.display === 'none';
+            const isHidden = supportBox.style.display === 'none' || !supportBox.style.display;
             supportBox.style.display = isHidden ? 'block' : 'none';
             supportToggleBtn.innerText = isHidden ? "× 閉じる" : "📣 開発を応援する";
         };
 
         async function initRecorder() {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-            mediaRecorder.onstop = async () => {
-                originalAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                await processBananakun(originalAudioBlob);
-            };
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+                mediaRecorder.onstop = async () => {
+                    originalAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await processBananakun(originalAudioBlob);
+                };
+            } catch (e) {
+                transDisplay.innerText = "マイクの使用を許可してください";
+            }
         }
 
         async function processBananakun(blob) {
@@ -179,19 +186,21 @@
                 bananaDisplay.innerText = "🍌 READY";
                 playBtn.classList.add('ready-to-play');
             } catch (e) {
-                transDisplay.innerText = "ERROR";
+                transDisplay.innerText = "解析エラー";
             }
         }
 
         recBtn.onpointerdown = async (e) => {
             e.preventDefault();
             if (!mediaRecorder) await initRecorder();
-            audioChunks = [];
-            isRecording = true;
-            mediaRecorder.start();
-            recBtn.classList.add('recording');
-            bananaDisplay.innerText = "";
-            playBtn.classList.remove('ready-to-play');
+            if (mediaRecorder && mediaRecorder.state === 'inactive') {
+                audioChunks = [];
+                isRecording = true;
+                mediaRecorder.start();
+                recBtn.classList.add('recording');
+                bananaDisplay.innerText = "";
+                playBtn.classList.remove('ready-to-play');
+            }
         };
 
         const stopRec = () => { if (isRecording) { isRecording = false; mediaRecorder.stop(); recBtn.classList.remove('recording'); } };
