@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v7.0 - Pure Banana 🍌</title>
+    <title>🍌 My Banana - Self Sampling 🍌</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
         * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -12,17 +12,18 @@
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; overflow: hidden; touch-action: none;
         }
-        #overlay {
+        #setup-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--banana-skin); z-index: 100;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
         }
-        #start-btn {
-            padding: 30px 50px; font-size: 1.5rem; font-weight: bold; background: white;
-            border: 6px solid var(--banana-brown); border-radius: 60px; color: var(--banana-brown);
-            cursor: pointer; box-shadow: 0 10px 0 var(--banana-brown);
+        .setup-step { display: none; flex-direction: column; align-items: center; }
+        .active-step { display: flex; }
+        .setup-btn {
+            width: 120px; height: 120px; border-radius: 50%; border: 6px solid var(--banana-brown);
+            background: white; font-size: 3rem; cursor: pointer; margin: 20px;
         }
-        .controls { display: flex; gap: 40px; }
+        .controls { display: none; gap: 40px; }
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer; box-shadow: 0 8px 0 var(--banana-brown);
@@ -36,11 +37,22 @@
 </head>
 <body>
 
-    <div id="overlay">
-        <button id="start-btn">バナナを起動する 🍌</button>
+    <div id="setup-overlay">
+        <div id="step-init" class="setup-step active-step">
+            <button class="setup-btn" id="btn-init">🍌</button>
+            <p>バナナを起動します</p>
+        </div>
+        <div id="step-ba" class="setup-step">
+            <button class="setup-btn" id="btn-ba">🎤</button>
+            <p>「バ」と言いながら押してください</p>
+        </div>
+        <div id="step-na" class="setup-step">
+            <button class="setup-btn" id="btn-na">🎤</button>
+            <p>「ナ」と言いながら押してください</p>
+        </div>
     </div>
 
-    <div class="controls">
+    <div class="controls" id="main-ui">
         <div style="text-align: center;">
             <button id="rec-btn" class="circle-btn">🎤</button>
             <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">TRANSFORM</div>
@@ -50,123 +62,131 @@
             <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">LISTEN</div>
         </div>
     </div>
-    <div id="msg" class="message">🎤を長押しして録音</div>
+    <div id="msg" class="message">準備中...</div>
 
     <script>
         let audioCtx, analyzer, processor, bananaBuffer = [];
         let isRecording = false;
-        let lastBeepTime = 0;
+        let baSample = null, naSample = null;
+        let currentStep = 'init';
 
-        const startBtn = document.getElementById('start-btn');
-        const recBtn = document.getElementById('rec-btn');
-        const playBtn = document.getElementById('play-btn');
+        const setupOverlay = document.getElementById('setup-overlay');
+        const mainUI = document.getElementById('main-ui');
         const msg = document.getElementById('msg');
 
-        startBtn.onclick = async () => {
-            try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const source = audioCtx.createMediaStreamSource(stream);
-                
-                analyzer = audioCtx.createAnalyser();
-                analyzer.fftSize = 256;
-                source.connect(analyzer);
+        // サンプリング用の一時的なバッファ
+        let tempBuffer = [];
 
-                processor = audioCtx.createScriptProcessor(4096, 1, 1);
-                processor.onaudioprocess = (e) => {
-                    if (isRecording) {
-                        // 声を解析して音量を取得
-                        const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-                        analyzer.getByteFrequencyData(dataArray);
-                        const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
-
-                        // 一定以上の音量があるときだけ、バナナ音をバッファに書き込む
-                        if (volume > 20) {
-                            writeBananaWave();
-                        } else {
-                            // 無音時は無音を書き込む
-                            const output = new Float32Array(e.inputBuffer.length);
-                            bananaBuffer.push(...output);
-                        }
-                    }
-                };
-                source.connect(processor);
-                processor.connect(audioCtx.destination);
-
-                document.getElementById('overlay').style.display = 'none';
-            } catch (e) {
-                alert("マイク接続に失敗しました。");
-            }
-        };
-
-        // 「バ」「ナ」に近い合成音を生成してバッファに追加する関数
-        function writeBananaWave() {
-            const sampleCount = 4096;
-            const wave = new Float32Array(sampleCount);
-            const now = audioCtx.currentTime;
+        async function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = audioCtx.createMediaStreamSource(stream);
             
-            // 0.15秒に1回、音節を切り替える（バ・ナ・バ・ナ...）
-            if (now - lastBeepTime > 0.15) {
-                const freq = 400 + Math.random() * 600; // ランダムなピッチ
-                for (let i = 0; i < sampleCount; i++) {
-                    // 矩形波とサイン波を混ぜて「バ」っぽいアタックを作る
-                    wave[i] = Math.sin(i * 0.2) * Math.sign(Math.sin(i * freq / audioCtx.sampleRate)) * 0.2;
-                    // 減衰
-                    wave[i] *= (1 - i / sampleCount);
+            analyzer = audioCtx.createAnalyser();
+            source.connect(analyzer);
+
+            processor = audioCtx.createScriptProcessor(2048, 1, 1);
+            processor.onaudioprocess = (e) => {
+                const input = e.inputBuffer.getChannelData(0);
+                if (isRecording) {
+                    // 通常のバナナ化録音
+                    const volume = Math.sqrt(input.reduce((s, x) => s + x * x, 0) / input.length);
+                    if (volume > 0.02) {
+                        const pitch = detectPitch(input);
+                        generateBananaStep(pitch, volume);
+                    } else {
+                        bananaBuffer.push(...new Float32Array(2048).fill(0));
+                    }
+                } else if (tempBuffer !== null) {
+                    // サンプリング用録音
+                    tempBuffer.push(...new Float32Array(input));
                 }
-                lastBeepTime = now;
-            }
-            bananaBuffer.push(...wave);
+            };
+            source.connect(processor);
+            processor.connect(audioCtx.destination);
         }
 
-        const handleStart = (e) => {
-            if (e) e.preventDefault();
-            if (!audioCtx) return;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            
-            isRecording = true;
-            bananaBuffer = [];
-            recBtn.classList.add('recording');
-            playBtn.classList.remove('ready-to-play');
-            msg.innerText = "バナナ化中...（声を出し続けて！）";
+        // ステップ遷移
+        document.getElementById('btn-init').onclick = async () => {
+            await initAudio();
+            showStep('ba');
         };
 
-        const handleStop = (e) => {
-            if (e) e.preventDefault();
-            if (!isRecording) return;
-            isRecording = false;
-            recBtn.classList.remove('recording');
-            
-            if (bananaBuffer.length > 0) {
-                playBtn.classList.add('ready-to-play');
-                msg.innerText = "バナナ化完了！🍌をタップ";
+        const setupSampleBtn = (btnId, nextStep, targetVar) => {
+            const btn = document.getElementById(btnId);
+            btn.onpointerdown = () => { tempBuffer = []; };
+            btn.onpointerup = () => {
+                const trimmed = tempBuffer.slice(tempBuffer.findIndex(v => Math.abs(v) > 0.05)); // アタックまで飛ばす
+                if (targetVar === 'ba') baSample = trimmed.slice(0, audioCtx.sampleRate * 0.3);
+                else naSample = trimmed.slice(0, audioCtx.sampleRate * 0.3);
+                tempBuffer = null;
+                showStep(nextStep);
+            };
+        };
+
+        setupSampleBtn('btn-ba', 'na', 'ba');
+        setupSampleBtn('btn-na', 'main', 'na');
+
+        function showStep(step) {
+            document.querySelectorAll('.setup-step').forEach(el => el.classList.remove('active-step'));
+            if (step === 'main') {
+                setupOverlay.style.display = 'none';
+                mainUI.style.display = 'flex';
+                msg.innerText = "あなたの声で再構築します。🎤を長押し。";
+            } else {
+                document.getElementById('step-' + step).classList.add('active-step');
             }
+        }
+
+        // ピッチ検出 & 生成ロジック
+        function detectPitch(buffer) {
+            let sum = 0; for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
+            if (Math.sqrt(sum / buffer.length) < 0.01) return 0;
+            let bestR = 0, bestLag = -1;
+            for (let lag = 20; lag < 500; lag++) {
+                let r = 0; for (let i = 0; i < buffer.length - lag; i++) r += buffer[i] * buffer[i + lag];
+                if (r > bestR) { bestR = r; bestLag = lag; }
+            }
+            return bestLag === -1 ? 0 : audioCtx.sampleRate / bestLag;
+        }
+
+        let stepCount = 0;
+        function generateBananaStep(pitch, volume) {
+            const frameSize = 2048;
+            const output = new Float32Array(frameSize);
+            const targetSyllable = (Math.floor(Date.now() / 150) % 2 === 0) ? baSample : naSample;
+            if(!targetSyllable) return;
+            
+            const rate = pitch ? pitch / 180 : 1.2; // 自分の声の高さに合わせる
+            for (let i = 0; i < frameSize; i++) {
+                const idx = Math.floor((stepCount + i) * rate) % targetSyllable.length;
+                output[i] = targetSyllable[idx] * volume * 2.5;
+            }
+            bananaBuffer.push(...output);
+            stepCount += frameSize;
+        }
+
+        const recBtn = document.getElementById('rec-btn');
+        recBtn.onpointerdown = (e) => {
+            if (e) e.preventDefault();
+            isRecording = true; bananaBuffer = []; stepCount = 0;
+            recBtn.classList.add('recording');
+            document.getElementById('play-btn').classList.remove('ready-to-play');
+        };
+        window.onpointerup = () => {
+            if(!isRecording) return;
+            isRecording = false; recBtn.classList.remove('recording');
+            if (bananaBuffer.length > 0) document.getElementById('play-btn').classList.add('ready-to-play');
         };
 
-        const playBanana = async (e) => {
-            if (e) e.preventDefault();
+        document.getElementById('play-btn').onclick = async () => {
             if (bananaBuffer.length === 0) return;
-            if (audioCtx.state === 'suspended') await audioCtx.resume();
-
+            await audioCtx.resume();
             const buffer = audioCtx.createBuffer(1, bananaBuffer.length, audioCtx.sampleRate);
             buffer.copyToChannel(new Float32Array(bananaBuffer), 0);
-            
             const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            
-            // 少しピッチを高くして滑稽にする
-            source.playbackRate.value = 1.3; 
-            
-            source.connect(audioCtx.destination);
-            source.start(0);
-            msg.innerText = "🍌 バナナ語再生中 🍌";
-            
-            source.onended = () => { msg.innerText = "意味は消え、バナナだけが残りました。"; };
+            source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
         };
-
-        recBtn.addEventListener('pointerdown', handleStart);
-        window.addEventListener('pointerup', handleStop);
-        playBtn.addEventListener('pointerdown', playBanana);
     </script>
 </body>
 </html>
