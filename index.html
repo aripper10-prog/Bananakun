@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banana Sound Buffer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        :root {
+            --bg-color: #fff9e6;
+            --text-color: #b5a46d;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            font-family: sans-serif;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .controls {
+            display: flex;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .btn-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .circle-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            font-size: 3rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+
+        .circle-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* 録音中の震え */
+        @keyframes shake {
+            0% { transform: translate(0,0); }
+            25% { transform: translate(2px,-2px); }
+            50% { transform: translate(-2px,2px); }
+            100% { transform: translate(0,0); }
+        }
+        .recording {
+            animation: shake 0.1s infinite;
+            background: #fff0f0;
+        }
+
+        /* 再生中の回転 */
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .playing {
+            animation: rotate 2s linear infinite;
+            background: #f0fff0;
+        }
+
+        .label {
+            font-size: 0.8rem;
+            color: var(--text-color);
+            font-weight: bold;
+        }
+
+        .message {
+            position: absolute;
+            bottom: 30px;
+            font-size: 0.7rem;
+            color: var(--text-color);
+            letter-spacing: 0.1em;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <div class="btn-wrapper">
+            <button id="rec-btn" class="circle-btn">🎤</button>
+            <span class="label">RECORD</span>
+        </div>
+        <div class="btn-wrapper">
+            <button id="play-btn" class="circle-btn">🍌</button>
+            <span class="label">PLAY</span>
+        </div>
+    </div>
+
+    <div class="message">これは事実ではなく、ただの音です</div>
+
+    <script>
+        let mic, recorder, player, pitchShift, delay, reverb;
+        let isInitialized = false;
+
+        const recBtn = document.getElementById('rec-btn');
+        const playBtn = document.getElementById('play-btn');
+
+        async function init() {
+            await Tone.start();
+            
+            mic = new Tone.UserMedia();
+            recorder = new Tone.Recorder();
+            
+            // エフェクト設定
+            pitchShift = new Tone.PitchShift(14); // +14半音
+            delay = new Tone.FeedbackDelay("6n", 0.4);
+            reverb = new Tone.Reverb({ decay: 4, wet: 0.5 });
+
+            // 録音パス: Mic -> Recorder (加工なしで録音し、再生時に加工する)
+            mic.connect(recorder);
+            
+            // 再生パス: Player -> Effects -> Destination
+            player = new Tone.Player().chain(pitchShift, delay, reverb, Tone.Destination);
+
+            await mic.open();
+            isInitialized = true;
+        }
+
+        // --- 録音ロジック ---
+        recBtn.addEventListener('mousedown', async () => {
+            if (!isInitialized) await init();
+            recBtn.classList.add('recording');
+            recorder.start();
+        });
+
+        window.addEventListener('mouseup', async () => {
+            if (recorder && recorder.state === "started") {
+                recBtn.classList.remove('recording');
+                const blob = await recorder.stop();
+                const url = URL.createObjectURL(blob);
+                await player.load(url);
+            }
+        });
+
+        // --- 再生ロジック ---
+        playBtn.addEventListener('click', async () => {
+            if (!player || !player.loaded) return;
+            
+            playBtn.classList.add('playing');
+            player.start();
+            
+            player.onstop = () => {
+                playBtn.classList.remove('playing');
+            };
+        });
+
+        // タッチデバイス対応
+        recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); recBtn.dispatchEvent(new Event('mousedown')); });
+        recBtn.addEventListener('touchend', (e) => { e.preventDefault(); window.dispatchEvent(new Event('mouseup')); });
+
+    </script>
+</body>
+</html>
