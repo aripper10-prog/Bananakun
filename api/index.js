@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Vercelのリクエストサイズ制限を回避し、生のストリームを扱う設定
 export const config = {
   api: {
     bodyParser: false,
@@ -8,23 +7,23 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  // POSTメソッド以外を弾く
   if (req.method !== 'POST') {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.error("API Key is missing");
     return res.status(500).json({ error: "APIキーが設定されていません" });
   }
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    // 高速で安定している 1.5-flash を使用
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    // ご指定の最新モデルを指定
+    // もしこれでも404が出る場合は、API側が未対応な可能性があるため
+    // その際は "gemini-1.5-flash-latest" を検討してください
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
-    // ストリームから音声データを読み込む
     const chunks = [];
     for await (const chunk of req) {
       chunks.push(chunk);
@@ -42,10 +41,9 @@ export default async function handler(req, res) {
       - あなたの返答はカタカナの「バナナ」の組み合わせのみ。
       - 句読点や感嘆符（！、？）は元の感情に合わせて使用して良い。
       - 元の言葉が「おれはダメだ」なら「バナナ、バ、ナナー！」のようにリズムを再現すること。
-      - 解説は一切不要。カタカナ以外の文字（漢字、ひらがな）は絶対に出さないでください。
+      - 解説は一切不要。カタカナ以外の文字は出さないでください。
     `;
 
-    // Gemini ストリーミング生成を開始
     const result = await model.generateContentStream([
       { text: prompt },
       {
@@ -56,15 +54,12 @@ export default async function handler(req, res) {
       }
     ]);
 
-    // HTTP 200 OK とストリーミング用ヘッダーを送信
     res.writeHead(200, {
       'Content-Type': 'text/plain; charset=utf-8',
       'Transfer-Encoding': 'chunked',
-      'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
     });
 
-    // Geminiからの回答をリアルタイムでクライアントへ流し込む
     for await (const chunk of result.stream) {
       const chunkText = chunk.text();
       if (chunkText) {
@@ -75,10 +70,9 @@ export default async function handler(req, res) {
     res.end();
   } catch (error) {
     console.error("Gemini Stream Error:", error);
-    // すでにヘッダーを送信済みの場合はres.statusは使えないためチェック
     if (!res.writableEnded) {
       if (!res.headersSent) {
-        res.status(500).json({ error: "バナナ化プロセスでエラーが発生しました" });
+        res.status(500).json({ error: error.message });
       } else {
         res.end();
       }
