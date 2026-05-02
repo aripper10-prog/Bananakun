@@ -178,7 +178,7 @@
         }
 
         async function processBananakun(blob) {
-            transDisplay.innerText = "侵食中...";
+            transDisplay.innerText = "無効化中...";
             bananaScript = "";
             try {
                 const response = await fetch('/api', { method: 'POST', body: blob });
