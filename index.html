@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v4.3 🍌</title>
+    <title>🍌 Bananakun v5 - Gauge Edition 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
         
         * {
-            /* 範囲選択と長押しメニューを完全に無効化 */
             -webkit-tap-highlight-color: transparent;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
@@ -19,48 +18,91 @@
         body {
             margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
-            font-family: sans-serif; overflow: hidden; touch-action: none; /* ブラウザのスクロールやズームを防止 */
+            font-family: sans-serif; overflow: hidden; touch-action: none;
         }
 
-        .controls { display: flex; gap: 40px; }
+        .controls { display: flex; gap: 40px; z-index: 10; }
         
+        .btn-container { position: relative; width: 140px; height: 140px; }
+
+        /* 円形ゲージのSVG */
+        .gauge-svg {
+            position: absolute;
+            top: -10px; left: -10px;
+            width: 160px; height: 160px;
+            transform: rotate(-90deg);
+            pointer-events: none;
+        }
+
+        .gauge-bg { fill: none; stroke: rgba(0,0,0,0.1); stroke-width: 8; }
+        .gauge-bar {
+            fill: none;
+            stroke: var(--banana-brown);
+            stroke-width: 8;
+            stroke-dasharray: 440; /* 2 * PI * r */
+            stroke-dashoffset: 440;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.1s linear;
+        }
+
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer;
             box-shadow: 0 8px 0 var(--banana-brown);
             display: flex; justify-content: center; align-items: center;
-            outline: none;
-            transition: transform 0.1s;
-            touch-action: none; /* ボタン上でのジェスチャーを無効化 */
+            outline: none; position: relative; z-index: 5;
         }
         
-        .recording { background: #ffeb3b !important; transform: scale(1.1) !important; border-color: #ff4444 !important; }
-        .ready-to-play { box-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 8px 0 var(--banana-brown); }
-        .circle-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--banana-brown); }
+        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; }
+        .ready-to-play { 
+            box-shadow: 0 0 30px rgba(255, 255, 255, 1), 0 8px 0 var(--banana-brown); 
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
         
-        .label { font-weight: bold; color: var(--banana-brown); margin-top: 10px; text-align: center; }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.8rem; text-align: center; width: 80%; }
+        .label { font-weight: bold; color: var(--banana-brown); margin-top: 15px; text-align: center; }
+        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.8rem; text-align: center; width: 80%; line-height: 1.5; }
     </style>
 </head>
 <body>
 
     <div class="controls">
         <div style="text-align: center;">
-            <button id="rec-btn" class="circle-btn">🎤</button>
+            <div class="btn-container">
+                <svg class="gauge-svg">
+                    <circle class="gauge-bg" cx="80" cy="80" r="70"></circle>
+                    <circle id="gauge-bar" class="gauge-bar" cx="80" cy="80" r="70"></circle>
+                </svg>
+                <button id="rec-btn" class="circle-btn">🎤</button>
+            </div>
             <div class="label">TRANSFORM</div>
         </div>
         <div style="text-align: center;">
-            <button id="play-btn" class="circle-btn">🍌</button>
+            <div class="btn-container">
+                <button id="play-btn" class="circle-btn">🍌</button>
+            </div>
             <div class="label">LISTEN</div>
         </div>
     </div>
 
-    <div id="msg" class="message">🎤ボタンを長押しして話してください</div>
+    <div id="msg" class="message">マイクを許可して、🎤を押し続けてください</div>
 
     <script>
         let mic, analyzer, recorder, player, synth, loop;
         let isInitialized = false;
+        let recordStartTime;
+        let gaugeInterval;
+        const MAX_REC_TIME = 5000; // 最大5秒
+        
         const msg = document.getElementById('msg');
+        const gaugeBar = document.getElementById('gauge-bar');
+        const recBtn = document.getElementById('rec-btn');
+        const playBtn = document.getElementById('play-btn');
 
         async function startSystem() {
             try {
@@ -84,8 +126,16 @@
             }
         }
 
-        const recBtn = document.getElementById('rec-btn');
-        const playBtn = document.getElementById('play-btn');
+        const updateGauge = () => {
+            const elapsed = Date.now() - recordStartTime;
+            const progress = Math.min(elapsed / MAX_REC_TIME, 1);
+            const offset = 440 - (progress * 440);
+            gaugeBar.style.strokeDashoffset = offset;
+            
+            if (progress >= 1) {
+                handleStop(new Event('touchend'));
+            }
+        };
 
         const handleStart = async (e) => {
             e.preventDefault();
@@ -93,6 +143,11 @@
             if (isInitialized) {
                 recBtn.classList.add('recording');
                 playBtn.classList.remove('ready-to-play');
+                gaugeBar.style.strokeDashoffset = 440;
+                
+                recordStartTime = Date.now();
+                gaugeInterval = setInterval(updateGauge, 50);
+                
                 recorder.start();
                 loop = new Tone.Loop(time => {
                     if (analyzer.value > 0.05) {
@@ -105,29 +160,29 @@
         };
 
         const handleStop = async (e) => {
-            e.preventDefault();
+            if (e) e.preventDefault();
             if (isInitialized && recorder.state === "started") {
+                clearInterval(gaugeInterval);
                 recBtn.classList.remove('recording');
                 if (loop) loop.stop();
                 Tone.Transport.stop();
+                
                 const blob = await recorder.stop();
                 const url = URL.createObjectURL(blob);
                 if (player) player.dispose();
                 player = new Tone.Player(url).toDestination();
                 player.buffer.onload = () => {
                     playBtn.classList.add('ready-to-play');
-                    msg.innerText = "バナナに変換されました。🍌を押して。";
+                    msg.innerText = "バナナ化完了。🍌を押して。";
                 };
             }
         };
 
-        // イベント登録（マウスとタッチの両方に対応）
         recBtn.addEventListener('mousedown', handleStart);
         window.addEventListener('mouseup', handleStop);
         recBtn.addEventListener('touchstart', handleStart, {passive: false});
         recBtn.addEventListener('touchend', handleStop, {passive: false});
 
-        // 再生ボタンの処理（クリック/タップ）
         const handlePlay = async (e) => {
             e.preventDefault();
             if (player && player.loaded) {
@@ -138,7 +193,6 @@
 
         playBtn.addEventListener('click', handlePlay);
         playBtn.addEventListener('touchstart', handlePlay, {passive: false});
-
     </script>
 </body>
 </html>
