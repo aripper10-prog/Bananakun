@@ -6,15 +6,27 @@
     <title>自責感情解体ツール ばなな君</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
+        
+        /* 基本は選択不可 */
         * { 
-           -webkit-tap-highlight-color: transparent; 
-            user-select: none; -webkit-user-select: none;
-            touch-action: none; box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent; 
+            user-select: none; 
+            -webkit-user-select: none;
+            box-sizing: border-box; 
         }
+
+        /* リンクやボタンなど、クリックが必要な要素だけ操作を許可 */
+        a, button, .support-box, .support-section {
+            touch-action: manipulation;
+            cursor: pointer;
+        }
+
         body {
             margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; overflow: hidden; position: relative;
+            /* 背景での無駄なスクロールを防止 */
+            touch-action: none;
         }
 
         /* 中央上タイトル */
@@ -31,6 +43,7 @@
             box-shadow: 0 8px 0 var(--banana-brown);
             display: flex; justify-content: center; align-items: center; 
             outline: none; transition: 0.1s;
+            touch-action: none; /* ボタン単体は長押し判定のため制御 */
         }
         .circle-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--banana-brown); }
         .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.1) !important; }
@@ -48,14 +61,21 @@
         .footer-right {
             position: absolute; bottom: 15px; right: 15px; text-align: right; 
             color: var(--banana-brown); font-size: 0.75rem; line-height: 1.6;
+            z-index: 100;
         }
-        .footer-right a { color: var(--banana-brown); text-decoration: underline; pointer-events: auto; -webkit-user-select: auto; }
+        /* リンクは選択（長押しコピー）も可能にする */
+        .footer-right a { 
+            color: var(--banana-brown); 
+            text-decoration: underline; 
+            -webkit-user-select: auto;
+            user-select: auto;
+        }
 
         /* 開発応援ボタン & ボックス */
-        .support-section { position: absolute; bottom: 20px; left: 20px; z-index: 20; }
+        .support-section { position: absolute; bottom: 20px; left: 20px; z-index: 100; }
         .support-toggle-btn {
             background: var(--banana-brown); color: white; border: none; padding: 8px 12px;
-            border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; touch-action: manipulation;
+            border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer;
         }
         .support-box {
             position: absolute; bottom: 45px; left: 0; background: white; padding: 15px;
@@ -122,10 +142,8 @@
         const supportBox = document.getElementById('support-box');
         const supportToggleBtn = document.getElementById('support-toggle-btn');
 
-        // 西暦の自動取得
         document.getElementById('year').innerText = new Date().getFullYear();
 
-        // 応援ボタンのトグル
         supportToggleBtn.onclick = () => {
             const isHidden = supportBox.style.display === 'none';
             supportBox.style.display = isHidden ? 'block' : 'none';
