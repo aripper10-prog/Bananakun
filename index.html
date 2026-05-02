@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun AI - Hybrid Voice 🍌</title>
+    <title>🍌 Bananakun Sync 🍌</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
-        * { -webkit-tap-highlight-color: transparent; user-select: none; box-sizing: border-box; }
         body {
             margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
-            font-family: sans-serif; overflow: hidden; touch-action: none;
+            font-family: sans-serif; overflow: hidden;
         }
         .controls { display: flex; gap: 40px; z-index: 10; }
         .circle-btn {
@@ -19,9 +18,11 @@
             display: flex; justify-content: center; align-items: center; outline: none; transition: 0.1s;
         }
         .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.1); }
-        .ready-to-play { box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 1s infinite; }
+        .ready-to-play { box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown); animation: pulse 1s infinite; }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; background: rgba(255,255,255,0.4); padding: 15px; border-radius: 12px; min-height: 4em; line-height: 1.4; word-break: break-all; }
+        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 1.2rem; font-weight: bold; text-align: center; width: 85%; min-height: 3em; }
+        .char-pop { display: inline-block; animation: pop 0.3s ease-out; color: var(--banana-brown); }
+        @keyframes pop { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1.2); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -37,7 +38,7 @@
         </div>
     </div>
     
-    <div id="msg" class="message">🎤を長押しして真実を話してください</div>
+    <div id="msg" class="message"></div>
 
     <script>
         let mediaRecorder, audioChunks = [];
@@ -50,94 +51,82 @@
         const msg = document.getElementById('msg');
 
         async function initRecorder() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-                mediaRecorder.onstop = async () => {
-                    originalAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    await startStreamingTransform(originalAudioBlob);
-                };
-            } catch (e) {
-                msg.innerText = "マイクの使用を許可してください";
-            }
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+            mediaRecorder.onstop = async () => {
+                originalAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                await sendToGemini(originalAudioBlob);
+            };
         }
 
-        async function startStreamingTransform(blob) {
-            msg.innerText = "意味を剥奪中...";
+        async function sendToGemini(blob) {
+            msg.innerText = "🍌...";
             bananaScript = "";
-            playBtn.classList.remove('ready-to-play');
-
-            try {
-                const response = await fetch('/api', {
-                    method: 'POST',
-                    body: blob
-                });
-
-                if (!response.ok) throw new Error("Server Error");
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const text = decoder.decode(value);
-                    bananaScript += text;
-                    msg.innerText = "🍌: " + bananaScript;
-                }
-
-                playBtn.classList.add('ready-to-play');
-                msg.innerText = "バナナ化完了：\n" + bananaScript;
-
-            } catch (err) {
-                msg.innerText = "エラーが発生しました。";
+            const response = await fetch('/api', { method: 'POST', body: blob });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                bananaScript += decoder.decode(value);
             }
+            playBtn.classList.add('ready-to-play');
+            msg.innerText = "READY";
         }
 
         recBtn.onpointerdown = async (e) => {
             e.preventDefault();
             if (!mediaRecorder) await initRecorder();
-            if (mediaRecorder && mediaRecorder.state === 'inactive') {
-                audioChunks = [];
-                isRecording = true;
-                mediaRecorder.start();
-                recBtn.classList.add('recording');
-                msg.innerText = "真実を録音中...";
-            }
+            audioChunks = [];
+            isRecording = true;
+            mediaRecorder.start();
+            recBtn.classList.add('recording');
         };
 
-        const stopRecording = () => {
-            if (isRecording && mediaRecorder.state === 'recording') {
-                isRecording = false;
-                mediaRecorder.stop();
-                recBtn.classList.remove('recording');
-            }
+        window.onpointerup = () => {
+            if (!isRecording) return;
+            isRecording = false;
+            mediaRecorder.stop();
+            recBtn.classList.remove('recording');
         };
 
-        window.onpointerup = stopRecording;
-
-        // ハイブリッド再生処理
+        // 同期再生エンジン
         playBtn.onclick = async () => {
             if (!bananaScript || !originalAudioBlob) return;
             
-            window.speechSynthesis.cancel();
-
-            // 1. 元の声を再生（ピッチを上げて「バナナ感」を出す）
             const audioUrl = URL.createObjectURL(originalAudioBlob);
             const audio = new Audio(audioUrl);
-            audio.playbackRate = 1.1; // 少し速く
-            audio.volume = 0.3;      // 背景として薄く流す
-            audio.play();
+            
+            // 文字を配列化（「バナナ」を1文字ずつ分解）
+            const chars = bananaScript.replace(/[・ \n]/g, "").split("");
+            msg.innerHTML = "";
+            
+            audio.onloadedmetadata = () => {
+                const duration = audio.duration;
+                const interval = (duration * 1000) / chars.length; // 1文字あたりの時間を計算
 
-            // 2. Geminiのバナナ語を合成音声で被せる
-            const uttr = new SpeechSynthesisUtterance(bananaScript);
-            uttr.lang = 'ja-JP';
-            uttr.pitch = 1.8;
-            uttr.rate = 1.1;
-            window.speechSynthesis.speak(uttr);
+                audio.play();
+                audio.volume = 0.4;
 
-            msg.innerText = "🍌 再生中... 🍌";
+                // 原音の進行に合わせて文字を表示＆読み上げ
+                chars.forEach((char, i) => {
+                    setTimeout(() => {
+                        // 視覚的ポップアップ
+                        const span = document.createElement("span");
+                        span.innerText = char;
+                        span.className = "char-pop";
+                        msg.appendChild(span);
+
+                        // 個別に読み上げ（短い発音）
+                        const uttr = new SpeechSynthesisUtterance(char);
+                        uttr.lang = 'ja-JP';
+                        uttr.pitch = 2.0;
+                        uttr.rate = 2.5; // 超速で一音を出す
+                        window.speechSynthesis.speak(uttr);
+                    }, i * interval);
+                });
+            };
         };
     </script>
 </body>
