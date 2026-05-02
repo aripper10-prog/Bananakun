@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun - Transcription Sync 🍌</title>
+    <title>🍌 Bananakun - Fluent Mode 🍌</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
         * { 
@@ -35,10 +35,8 @@
         }
         .transcription { font-size: 0.9rem; opacity: 0.6; margin-bottom: 10px; font-style: italic; }
         .banana-text { 
-            font-size: 1.8rem; font-weight: bold; display: flex; flex-wrap: wrap; justify-content: center; 
+            font-size: 2.2rem; font-weight: bold; color: var(--banana-brown);
         }
-        .char-pop { display: inline-block; animation: pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); margin: 2px; }
-        @keyframes pop { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1.2); opacity: 1; } }
     </style>
 </head>
 <body>
@@ -62,7 +60,6 @@
     <script>
         let mediaRecorder, audioChunks = [];
         let bananaScript = "";
-        let originalText = "";
         let originalAudioBlob = null;
         let isRecording = false;
 
@@ -72,102 +69,72 @@
         const bananaDisplay = document.getElementById('banana-display');
 
         async function initRecorder() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-                mediaRecorder.onstop = async () => {
-                    originalAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    await processBananakun(originalAudioBlob);
-                };
-            } catch (e) {
-                transDisplay.innerText = "マイク許可が必要です";
-            }
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+            mediaRecorder.onstop = async () => {
+                originalAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                await processBananakun(originalAudioBlob);
+            };
         }
 
         async function processBananakun(blob) {
             transDisplay.innerText = "解析中...";
-            bananaDisplay.innerHTML = "";
             bananaScript = "";
-
             try {
                 const response = await fetch('/api', { method: 'POST', body: blob });
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                
-                let rawOutput = "";
+                let raw = "";
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-                    rawOutput += decoder.decode(value);
+                    raw += decoder.decode(value);
                 }
-
-                // AIからの出力を解析（例: "原文: おれはばかだ | [L]バ[L]ナ[H]ナ..."）
-                // サーバー側のプロンプトでこの形式を指定する必要があります
-                const parts = rawOutput.split('|');
-                originalText = parts[0] ? parts[0].replace("原文:", "").trim() : "";
-                bananaScript = parts[1] ? parts[1].trim() : rawOutput;
-
-                transDisplay.innerText = `「${originalText}」`;
-                playBtn.classList.add('ready-to-play');
+                const parts = raw.split('|');
+                transDisplay.innerText = parts[0] ? parts[0].replace("原文:", "").trim() : "";
+                bananaScript = parts[1] ? parts[1].trim() : raw;
                 bananaDisplay.innerText = "🍌 READY";
+                playBtn.classList.add('ready-to-play');
             } catch (e) {
-                transDisplay.innerText = "エラーが発生しました";
+                transDisplay.innerText = "ERROR";
             }
         }
 
         recBtn.onpointerdown = async (e) => {
             e.preventDefault();
             if (!mediaRecorder) await initRecorder();
-            if (mediaRecorder.state === 'inactive') {
-                audioChunks = [];
-                isRecording = true;
-                mediaRecorder.start();
-                recBtn.classList.add('recording');
-                transDisplay.innerText = "録音中...";
-                bananaDisplay.innerHTML = "";
-                playBtn.classList.remove('ready-to-play');
-            }
+            audioChunks = [];
+            isRecording = true;
+            mediaRecorder.start();
+            recBtn.classList.add('recording');
+            bananaDisplay.innerText = "";
         };
 
         const stopRec = () => { if (isRecording) { isRecording = false; mediaRecorder.stop(); recBtn.classList.remove('recording'); } };
         window.onpointerup = stopRec;
         recBtn.onpointerleave = stopRec;
 
-        playBtn.onclick = async () => {
+        playBtn.onclick = () => {
             if (!bananaScript || !originalAudioBlob) return;
             window.speechSynthesis.cancel();
-            bananaDisplay.innerHTML = "";
-
-            const pattern = /\[([HL])\]([バナ])|([ーッ！])/g;
-            let match;
-            const notes = [];
-            while ((match = pattern.exec(bananaScript)) !== null) {
-                notes.push({ type: match[1] || "L", char: match[2] || match[3] });
-            }
-
+            
             const audio = new Audio(URL.createObjectURL(originalAudioBlob));
             audio.onloadedmetadata = () => {
-                const interval = (audio.duration * 1000) / (notes.length || 1);
-                audio.volume = 0; 
-                audio.play();
+                const duration = audio.duration; // 原音の秒数
+                
+                const uttr = new SpeechSynthesisUtterance(bananaScript);
+                uttr.lang = 'ja-JP';
+                uttr.pitch = 1.6;
+                
+                // 【流暢さの鍵】原音の長さに合わせて話速を調整
+                // 日本語の平均的な発話速度を基準に、duration内に収まるrateを算出
+                // 1文字あたり約0.15秒と仮定して計算
+                const estimatedRate = (bananaScript.length * 0.15) / duration;
+                uttr.rate = Math.max(0.5, Math.min(3.0, estimatedRate)); 
 
-                notes.forEach((note, i) => {
-                    setTimeout(() => {
-                        const span = document.createElement("span");
-                        span.innerText = note.char;
-                        span.className = "char-pop";
-                        bananaDisplay.appendChild(span);
-
-                        if (/[バナ]/.test(note.char)) {
-                            const uttr = new SpeechSynthesisUtterance(note.char);
-                            uttr.lang = 'ja-JP';
-                            uttr.pitch = note.type === "H" ? 2.2 : 1.1;
-                            uttr.rate = 3.0; 
-                            window.speechSynthesis.speak(uttr);
-                        }
-                    }, i * interval);
-                });
+                bananaDisplay.innerText = bananaScript;
+                window.speechSynthesis.speak(uttr);
             };
         };
     </script>
