@@ -15,7 +15,6 @@
             box-sizing: border-box; 
         }
 
-        /* リンクとテキスト表示エリアは選択・操作を許可 */
         a, .support-section, #trans-text, #banana-display {
             -webkit-touch-callout: default;
             -webkit-user-select: auto;
@@ -27,7 +26,6 @@
             margin: 0; padding: 15px; display: flex; flex-direction: column; 
             min-height: 100dvh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; color: var(--banana-brown);
-            /* スクロールを許可する設定に変更 */
             overflow-y: auto; 
             -webkit-overflow-scrolling: touch;
         }
@@ -35,20 +33,25 @@
         .container {
             width: 100%; max-width: 450px; margin: 0 auto;
             display: flex; flex-direction: column; align-items: center;
-            min-height: 100%; /* 中身に応じて伸びるように */
+            min-height: 100%;
         }
 
         .title-area {
             border-bottom: 1px solid rgba(111, 78, 55, 0.2);
-            margin-bottom: 20px; padding: 20px 0 10px 0; text-align: center; width: 100%;
+            margin-bottom: 10px; padding: 20px 0 10px 0; text-align: center; width: 100%;
         }
         .sub-title { font-size: 11px; font-weight: bold; letter-spacing: 1.5px; opacity: 0.8; }
         .main-title { font-size: 28px; font-weight: bold; margin-top: 5px; }
 
+        /* 追加された説明文のスタイル */
+        .description-text {
+            font-size: 12px; font-weight: bold; opacity: 0.7; margin-bottom: 20px; text-align: center;
+        }
+
         .main-content {
             flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
             align-items: center; width: 100%; gap: 40px; 
-            padding: 20px 0; /* 上下の余白を確保 */
+            padding: 10px 0;
         }
 
         .controls { display: flex; gap: 40px; z-index: 10; }
@@ -59,7 +62,6 @@
             box-shadow: 0 8px 0 var(--banana-brown);
             display: flex; justify-content: center; align-items: center; 
             outline: none; transition: 0.1s;
-            /* ボタン上でのスクロール暴発を防ぐ */
             touch-action: none; 
         }
         .circle-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--banana-brown); }
@@ -105,6 +107,8 @@
             <div class="sub-title">思考言語無効化ツール</div>
             <div class="main-title">ばなな君</div>
         </div>
+
+        <div class="description-text">あなたのモヤモヤを無意味なバナナ語に変換します</div>
 
         <div class="main-content">
             <div class="controls">
