@@ -1,113 +1,26 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun AI - Serverless Edition 🍌</title>
-    <style>
-        :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
-        * { -webkit-tap-highlight-color: transparent; user-select: none; }
-        body {
-            margin: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
-            font-family: sans-serif; overflow: hidden;
-        }
-        .controls { display: flex; gap: 40px; z-index: 10; }
-        .circle-btn {
-            width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
-            background: white; font-size: 5rem; cursor: pointer; box-shadow: 0 8px 0 var(--banana-brown);
-            display: flex; justify-content: center; align-items: center; outline: none; transition: 0.1s;
-        }
-        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.1); }
-        .ready-to-play { box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; background: rgba(255,255,255,0.4); padding: 10px; border-radius: 10px; min-height: 1.2em; }
-    </style>
-</head>
-<body>
+// ...（録音部分の抜粋）...
 
-    <div class="controls">
-        <div style="text-align: center;">
-            <button id="rec-btn" class="circle-btn">🎤</button>
-            <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">TRANSFORM</div>
-        </div>
-        <div style="text-align: center;">
-            <button id="play-btn" class="circle-btn">🍌</button>
-            <div style="font-weight:bold; color:var(--banana-brown); margin-top:15px;">LISTEN</div>
-        </div>
-    </div>
+async function sendToServerStreaming(blob) {
+    msg.innerText = "ストリーミング変換中...";
     
-    <div id="msg" class="message">🎤を長押しして真実を話してください</div>
+    // チャンクに分けて送信するか、すてる君のライブラリがあるならそれを流用
+    const response = await fetch('/api/transform-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'audio/webm' },
+        body: blob // 直接Blobを投げ、サーバー側でストリームとして受ける
+    });
 
-    <script>
-        let mediaRecorder, audioChunks = [];
-        let bananaScript = "";
-        let isRecording = false;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    bananaScript = "";
 
-        const recBtn = document.getElementById('rec-btn');
-        const playBtn = document.getElementById('play-btn');
-        const msg = document.getElementById('msg');
-
-        async function initRecorder() {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                await sendToServer(audioBlob);
-            };
-        }
-
-        async function sendToServer(blob) {
-            msg.innerText = "Vercel経由でGeminiが変換中...";
-            
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = async () => {
-                const base64Audio = reader.result.split(',')[1];
-                
-                try {
-                    const response = await fetch('/api/transform', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ audio: base64Audio })
-                    });
-                    const data = await response.json();
-                    bananaScript = data.bananaText;
-                    playBtn.classList.add('ready-to-play');
-                    msg.innerText = "バナナ化成功！";
-                } catch (err) {
-                    msg.innerText = "サーバーエラーが発生しました";
-                }
-            };
-        }
-
-        recBtn.onpointerdown = async (e) => {
-            if (e) e.preventDefault();
-            if (!mediaRecorder) await initRecorder();
-            audioChunks = [];
-            isRecording = true;
-            mediaRecorder.start();
-            recBtn.classList.add('recording');
-            playBtn.classList.remove('ready-to-play');
-            msg.innerText = "録音中...";
-        };
-
-        window.onpointerup = () => {
-            if (!isRecording) return;
-            isRecording = false;
-            mediaRecorder.stop();
-            recBtn.classList.remove('recording');
-        };
-
-        playBtn.onclick = () => {
-            if (!bananaScript) return;
-            const uttr = new SpeechSynthesisUtterance(bananaScript);
-            uttr.lang = 'ja-JP';
-            uttr.pitch = 1.6;
-            uttr.rate = 1.2;
-            window.speechSynthesis.speak(uttr);
-        };
-    </script>
-</body>
-</html>
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        // ストリーミングで返ってくるバナナ語を逐次表示
+        bananaScript += chunk;
+        msg.innerText = "生成中: " + bananaScript;
+    }
+    playBtn.classList.add('ready-to-play');
+}
