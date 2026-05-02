@@ -2,96 +2,123 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Banana Sound Buffer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>🍌 Bananakun v3 - Organic Audio 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root {
-            --bg-color: #fff9e6;
-            --text-color: #b5a46d;
+            --banana-pulp: #fffbe6;
+            --banana-skin: #fadb14;
+            --banana-ripe: #e0ac00;
+            --banana-brown: #6f4e37;
+            --text-color: #5d4037;
         }
 
         body {
             margin: 0;
+            padding: 0;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-color: var(--bg-color);
-            font-family: sans-serif;
+            background: linear-gradient(135deg, var(--banana-pulp) 0%, var(--banana-skin) 50%, var(--banana-ripe) 100%);
+            font-family: 'Courier New', Courier, monospace;
             user-select: none;
             overflow: hidden;
+            -webkit-touch-callout: none;
+        }
+
+        body::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4uRkAAAABlBMVEUAAADY2Njn5+f///8mS92MAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAQ0lEQVQ4y2P4jwYw4uMPEmMgAnByCOK4COK4CJI4CJJ4COK4CJI4COK4COK4CJI4COK4CJI4COK4CJI4COK4OBUBAN5+Anm5D5vYAAAAAElFTkSuQmCC');
+            opacity: 0.05;
+            pointer-events: none;
         }
 
         .controls {
             display: flex;
-            gap: 40px;
+            gap: 50px;
             align-items: center;
+            z-index: 10;
         }
 
         .btn-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 15px;
         }
 
         .circle-btn {
-            width: 120px;
-            height: 120px;
+            width: 140px;
+            height: 140px;
             border-radius: 50%;
+            border: 8px solid var(--banana-brown);
             background: white;
-            border: none;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            font-size: 3rem;
+            box-shadow: 0 10px 0 var(--banana-brown), 0 15px 30px rgba(0,0,0,0.2);
+            font-size: 5rem;
             cursor: pointer;
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: all 0.2s;
+            transition: all 0.1s ease-out;
             touch-action: manipulation;
+            position: relative;
         }
 
         .circle-btn:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transform: translateY(6px);
+            box-shadow: 0 4px 0 var(--banana-brown), 0 8px 15px rgba(0,0,0,0.2);
         }
 
-        /* 録音中の震え */
-        @keyframes shake {
-            0% { transform: translate(0,0); }
-            25% { transform: translate(2px,-2px); }
-            50% { transform: translate(-2px,2px); }
-            100% { transform: translate(0,0); }
+        @keyframes banana-shake {
+            0% { transform: translate(0,0) scale(1); }
+            20% { transform: translate(3px,-3px) scale(1.05); }
+            40% { transform: translate(-3px,3px) scale(1); }
+            60% { transform: translate(3px,3px) scale(1.05); }
+            80% { transform: translate(-3px,-3px) scale(1); }
+            100% { transform: translate(0,0) scale(1); }
         }
         .recording {
-            animation: shake 0.1s infinite;
-            background: #fff0f0;
+            animation: banana-shake 0.15s infinite;
+            background: #ffcccc;
+            border-color: #ff4444;
         }
 
-        /* 再生中の回転 */
-        @keyframes rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        @keyframes banana-dance {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(15deg) scale(1.1) translateY(-10px); }
+            50% { transform: rotate(-15deg) scale(1) translateY(0px); }
+            75% { transform: rotate(10deg) scale(1.1) translateY(-5px); }
         }
         .playing {
-            animation: rotate 2s linear infinite;
-            background: #f0fff0;
+            animation: banana-dance 0.6s linear infinite;
+            background: #e6fffa;
+            border-color: #38b2ac;
         }
 
         .label {
-            font-size: 0.8rem;
+            font-size: 1rem;
             color: var(--text-color);
             font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            background: rgba(255,255,255,0.5);
+            padding: 2px 8px;
+            border-radius: 4px;
         }
 
         .message {
             position: absolute;
             bottom: 30px;
-            font-size: 0.7rem;
-            color: var(--text-color);
-            letter-spacing: 0.1em;
+            font-size: 0.75rem;
+            color: var(--banana-brown);
+            letter-spacing: 0.15em;
+            font-style: italic;
+            z-index: 10;
         }
     </style>
 </head>
@@ -100,18 +127,19 @@
     <div class="controls">
         <div class="btn-wrapper">
             <button id="rec-btn" class="circle-btn">🎤</button>
-            <span class="label">RECORD</span>
+            <span class="label">Input</span>
         </div>
         <div class="btn-wrapper">
             <button id="play-btn" class="circle-btn">🍌</button>
-            <span class="label">PLAY</span>
+            <span class="label">Peel</span>
         </div>
     </div>
 
-    <div class="message">これは事実ではなく、ただの音です</div>
+    <div class="message">これは事実ではなく、ただの音（バナナ）です</div>
 
     <script>
-        let mic, recorder, player, pitchShift, delay, reverb;
+        let mic, recorder, player;
+        let pitchShift, dist, vib, filter, delay, reverb;
         let isInitialized = false;
 
         const recBtn = document.getElementById('rec-btn');
@@ -123,41 +151,60 @@
             mic = new Tone.UserMedia();
             recorder = new Tone.Recorder();
             
-            // エフェクト設定
-            pitchShift = new Tone.PitchShift(14); // +14半音
-            delay = new Tone.FeedbackDelay("6n", 0.4);
-            reverb = new Tone.Reverb({ decay: 4, wet: 0.5 });
-
-            // 録音パス: Mic -> Recorder (加工なしで録音し、再生時に加工する)
-            mic.connect(recorder);
+            // --- バナナ・サウンド・エンジン構成 ---
             
-            // 再生パス: Player -> Effects -> Destination
-            player = new Tone.Player().chain(pitchShift, delay, reverb, Tone.Destination);
+            // 1. 基本のピッチシフト
+            pitchShift = new Tone.PitchShift(13);
+
+            // 2. 粘り気（チェビシェフ歪み）: 50次の倍音成分で物質感を出す
+            dist = new Tone.Chebyshev(50); 
+            
+            // 3. ぐにゃりとした揺れ（ビブラート）
+            vib = new Tone.Vibrato(5, 0.3); 
+
+            // 4. こもったバナナ感（ローパスフィルター）
+            filter = new Tone.Filter(1400, "lowpass");
+
+            // 5. 抽象化（ディレイ & リバーブ）
+            delay = new Tone.FeedbackDelay("8n.", 0.4);
+            reverb = new Tone.Reverb({ decay: 3, wet: 0.5 });
+
+            // 接続
+            mic.connect(recorder);
+            player = new Tone.Player();
+            
+            // プロセッシングチェーン
+            player.chain(pitchShift, dist, vib, filter, delay, reverb, Tone.Destination);
 
             await mic.open();
             isInitialized = true;
         }
 
-        // --- 録音ロジック ---
-        recBtn.addEventListener('mousedown', async () => {
+        const startRec = async () => {
             if (!isInitialized) await init();
             recBtn.classList.add('recording');
             recorder.start();
-        });
+        };
 
-        window.addEventListener('mouseup', async () => {
+        const stopRec = async () => {
             if (recorder && recorder.state === "started") {
                 recBtn.classList.remove('recording');
                 const blob = await recorder.stop();
                 const url = URL.createObjectURL(blob);
                 await player.load(url);
             }
-        });
+        };
 
-        // --- 再生ロジック ---
+        // イベントリスナー
+        recBtn.addEventListener('mousedown', startRec);
+        window.addEventListener('mouseup', stopRec);
+        recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRec(); });
+        recBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRec(); });
+
         playBtn.addEventListener('click', async () => {
             if (!player || !player.loaded) return;
-            
+            if (player.state === "started") player.stop();
+
             playBtn.classList.add('playing');
             player.start();
             
@@ -165,11 +212,6 @@
                 playBtn.classList.remove('playing');
             };
         });
-
-        // タッチデバイス対応
-        recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); recBtn.dispatchEvent(new Event('mousedown')); });
-        recBtn.addEventListener('touchend', (e) => { e.preventDefault(); window.dispatchEvent(new Event('mouseup')); });
-
     </script>
 </body>
 </html>
