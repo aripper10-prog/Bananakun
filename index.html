@@ -6,9 +6,22 @@
     <title>自責感情解体ツール ばなな君</title>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; --accent-blue: #58a6ff; }
+        
+        /* 1. 画面全体の青い選択とハイライトを徹底排除 */
         * { 
             -webkit-tap-highlight-color: transparent; 
+            -webkit-touch-callout: none; /* 長押しメニュー禁止 */
+            -webkit-user-select: none;   /* テキスト選択禁止 */
+            user-select: none;
             box-sizing: border-box; 
+        }
+
+        /* 2. リンクと応援セクションだけは操作と選択を許可 */
+        a, .support-section, #trans-text, #banana-display {
+            -webkit-touch-callout: default;
+            -webkit-user-select: auto;
+            user-select: auto;
+            touch-action: manipulation;
         }
 
         body {
@@ -16,16 +29,15 @@
             min-height: 100dvh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; color: var(--banana-brown); overflow-x: hidden;
             position: relative;
+            touch-action: none; /* 背景のズームやスクロールを防止 */
         }
 
-        /* 画面全体のコンテナ */
         .container {
             width: 100%; max-width: 450px; margin: 0 auto;
             display: flex; flex-direction: column; align-items: center;
             flex-grow: 1;
         }
 
-        /* タイトルエリア（すてる君準拠） */
         .title-area {
             border-bottom: 1px solid rgba(111, 78, 55, 0.2);
             margin-bottom: 20px; padding: 20px 0 10px 0; text-align: center; width: 100%;
@@ -33,7 +45,6 @@
         .sub-title { font-size: 11px; font-weight: bold; letter-spacing: 1.5px; opacity: 0.8; }
         .main-title { font-size: 28px; font-weight: bold; margin-top: 5px; }
 
-        /* メインUI */
         .main-content {
             flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
             align-items: center; width: 100%; gap: 40px; margin-bottom: 100px;
@@ -41,12 +52,14 @@
 
         .controls { display: flex; gap: 40px; z-index: 10; }
 
+        /* ボタンのガード：青くならないように設定 */
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer; 
             box-shadow: 0 8px 0 var(--banana-brown);
             display: flex; justify-content: center; align-items: center; 
-            outline: none; transition: 0.1s; touch-action: none;
+            outline: none; transition: 0.1s;
+            touch-action: none; /* 長押しイベントを奪われないように */
         }
         .circle-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--banana-brown); }
         .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.1); }
@@ -57,12 +70,11 @@
         .transcription { font-size: 14px; opacity: 0.6; font-style: italic; margin-bottom: 10px; min-height: 1.2em; }
         .banana-display { font-size: 28px; font-weight: bold; line-height: 1.3; word-break: break-all; }
 
-        /* 応援セクション（すてる君準拠） */
         .support-section { margin-top: 20px; text-align: center; width: 100%; z-index: 50; }
         .support-toggle-btn {
             background: none; border: 1px solid rgba(111, 78, 55, 0.3);
             color: var(--banana-brown); padding: 8px 16px; border-radius: 20px;
-            font-size: 11px; cursor: pointer; transition: 0.3s; touch-action: manipulation;
+            font-size: 11px; cursor: pointer; transition: 0.3s;
         }
         .support-box {
             background: white; border: 1px solid rgba(111, 78, 55, 0.2);
@@ -73,17 +85,15 @@
         .qr-wrapper img { width: 100%; display: block; }
         .app-launch-btn {
             display: block; background: #ff0033; color: white; text-decoration: none;
-            padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px; touch-action: manipulation;
+            padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px;
         }
 
-        /* フッターリンク・コピーライト */
         .footer-links { margin-top: auto; padding: 20px 0; text-align: center; width: 100%; }
         .footer-links a { 
             color: var(--banana-brown); font-size: 12px; text-decoration: underline; 
-            display: inline-block; margin: 5px 10px; touch-action: manipulation;
+            display: inline-block; margin: 5px 10px;
         }
         .copyright { font-size: 11px; opacity: 0.7; margin-top: 10px; }
-
     </style>
 </head>
 <body>
@@ -143,10 +153,8 @@
         const supportBox = document.getElementById('support-box');
         const supportToggleBtn = document.getElementById('support-toggle-btn');
 
-        // 西暦セット
         document.getElementById('year').innerText = new Date().getFullYear();
 
-        // 応援ボタン
         supportToggleBtn.onclick = () => {
             const isHidden = supportBox.style.display === 'none' || !supportBox.style.display;
             supportBox.style.display = isHidden ? 'block' : 'none';
