@@ -1,0 +1,9 @@
+{
+  "name": "bananakun",
+  "version": "1.0.0",
+  "description": "Meaning Eraser AI",
+  "main": "api/index.js",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0"
+  }
+}
