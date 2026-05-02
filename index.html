@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v5.6 - Force Unlock 🍌</title>
+    <title>🍌 Bananakun v5.7 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
@@ -23,7 +23,7 @@
         .ready-to-play { box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown) !important; animation: pulse 1s infinite; }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
         .label { font-weight: bold; color: var(--banana-brown); margin-top: 15px; text-align: center; }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; padding: 10px; background: rgba(255,255,255,0.4); border-radius: 10px; }
+        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 85%; padding: 10px; background: rgba(255,255,255,0.4); border-radius: 10px; min-height: 1.2em; }
     </style>
 </head>
 <body>
@@ -40,7 +40,7 @@
     <div id="msg" class="message">🎤をタップして開始</div>
 
     <script>
-        let mic, analyzer, synth, loop;
+        let mic, analyzer, synth, loop, processor;
         let isInitialized = false;
         let bananaBuffer = [];
         let sampleRate;
@@ -49,70 +49,75 @@
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
 
-        async function init() {
+        async function tryInit() {
             try {
-                // 1. まず音響コンテキストを起動
+                msg.innerText = "マイクを起動中...";
                 await Tone.start();
                 
-                // 2. マイクへのアクセスを試みる
-                mic = new Tone.UserMedia();
+                if (!mic) {
+                    mic = new Tone.UserMedia();
+                }
+                
+                // 既に開いている場合は一旦閉じる（クリーンアップ）
+                if (mic.state === "opened") { await mic.close(); }
+                
                 await mic.open();
                 
-                // 3. ここまで来れたら「許可された」とみなす
+                // 成功後の処理
                 sampleRate = Tone.getContext().sampleRate;
                 analyzer = new Tone.Follower(0.1);
                 mic.connect(analyzer);
 
-                synth = new Tone.MonoSynth({
-                    oscillator: { type: "square8" },
-                    envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
-                });
+                if (!synth) {
+                    synth = new Tone.MonoSynth({
+                        oscillator: { type: "square8" },
+                        envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
+                    });
+                    const pShift = new Tone.PitchShift(13);
+                    const reverb = new Tone.Reverb(1.5);
+                    synth.chain(pShift, reverb, Tone.Destination);
+                }
 
-                const processor = Tone.getContext().createScriptProcessor(4096, 1, 1);
-                processor.onaudioprocess = (e) => {
-                    if (recBtn.classList.contains('recording')) {
-                        bananaBuffer.push(...e.inputBuffer.getChannelData(0));
-                    }
-                };
-
-                const pShift = new Tone.PitchShift(13);
-                const reverb = new Tone.Reverb(1.5);
-                synth.chain(pShift, reverb, Tone.Destination);
-                synth.connect(processor);
-                processor.connect(Tone.getContext().destination);
+                if (!processor) {
+                    processor = Tone.getContext().createScriptProcessor(4096, 1, 1);
+                    processor.onaudioprocess = (e) => {
+                        if (recBtn.classList.contains('recording')) {
+                            bananaBuffer.push(...e.inputBuffer.getChannelData(0));
+                        }
+                    };
+                    synth.connect(processor);
+                    processor.connect(Tone.getContext().destination);
+                }
 
                 isInitialized = true;
-                msg.innerText = "バナナ化の準備完了。🎤を長押しして。";
+                msg.innerText = "準備完了！🎤を長押しして話して。";
+                return true;
             } catch (e) {
-                // 許可待ちの間、または拒否された場合
-                msg.innerText = "マイクが許可されていません。設定を確認して。";
+                msg.innerText = "マイクが拒否されました。もう一度🎤を叩いて。";
                 console.error(e);
+                return false;
             }
         }
 
         const handleStart = async (e) => {
             if (e) e.preventDefault();
             
-            // 初回タップ時に初期化を試みる
-            if (!isInitialized) {
-                msg.innerText = "マイクを確認中...";
-                await init();
-                return; // 初回は初期化のみで終了させる（バグ防止）
-            }
+            // 状態に関わらず、押されるたびにマイクチェック
+            const success = await tryInit();
+            if (!success) return;
 
-            if (isInitialized) {
-                bananaBuffer = [];
-                recBtn.classList.add('recording');
-                playBtn.classList.remove('ready-to-play');
-                
-                loop = new Tone.Loop(t => {
-                    if (analyzer.value > 0.02) {
-                        synth.triggerAttackRelease(["C5","E5","G5","A5"][Math.floor(Math.random()*4)], "16n", t);
-                    }
-                }, "8n").start(0);
-                Tone.Transport.start();
-                msg.innerText = "バナナに変換中...";
-            }
+            // 録音開始
+            bananaBuffer = [];
+            recBtn.classList.add('recording');
+            playBtn.classList.remove('ready-to-play');
+            
+            loop = new Tone.Loop(t => {
+                if (analyzer.value > 0.02) {
+                    synth.triggerAttackRelease(["C5","E5","G5","A5"][Math.floor(Math.random()*4)], "16n", t);
+                }
+            }, "8n").start(0);
+            Tone.Transport.start();
+            msg.innerText = "バナナに変換中...";
         };
 
         const handleStop = (e) => {
@@ -126,15 +131,18 @@
                     playBtn.classList.add('ready-to-play');
                     msg.innerText = "バナナ化完了！🍌をタップ。";
                 } else {
-                    msg.innerText = "もう一度🎤を長押しして話して。";
+                    msg.innerText = "声が届いていません。もっと近くで話して。";
                 }
             }
         };
 
         const playBanana = async (e) => {
             if (e) e.preventDefault();
-            if (!isInitialized) { await init(); return; }
-            if (bananaBuffer.length === 0) return;
+            await Tone.start();
+            if (bananaBuffer.length === 0) {
+                await tryInit();
+                return;
+            }
 
             const buffer = Tone.getContext().createBuffer(1, bananaBuffer.length, sampleRate);
             buffer.copyToChannel(new Float32Array(bananaBuffer), 0);
@@ -145,12 +153,11 @@
             source.start();
         };
 
-        recBtn.addEventListener('mousedown', handleStart);
-        window.addEventListener('mouseup', handleStop);
-        recBtn.addEventListener('touchstart', handleStart, {passive: false});
-        recBtn.addEventListener('touchend', handleStop, {passive: false});
-        playBtn.addEventListener('click', playBanana);
-        playBtn.addEventListener('touchstart', playBanana, {passive: false});
+        // イベントをpointer系に統合して反応を安定させる
+        recBtn.addEventListener('pointerdown', handleStart);
+        window.addEventListener('pointerup', handleStop);
+        
+        playBtn.addEventListener('pointerdown', playBanana);
     </script>
 </body>
 </html>
