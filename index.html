@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v5.8 🍌</title>
+    <title>🍌 Bananakun v5.9 - Force Access 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
@@ -14,17 +14,18 @@
             font-family: sans-serif; overflow: hidden; touch-action: none;
         }
 
-        /* 起動オーバーレイ */
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--banana-skin); z-index: 100;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
         }
         #start-btn {
-            padding: 20px 40px; font-size: 1.5rem; font-weight: bold;
-            background: white; border: 4px solid var(--banana-brown);
-            border-radius: 50px; color: var(--banana-brown); cursor: pointer;
+            padding: 30px 50px; font-size: 1.5rem; font-weight: bold;
+            background: white; border: 6px solid var(--banana-brown);
+            border-radius: 60px; color: var(--banana-brown); cursor: pointer;
+            box-shadow: 0 10px 0 var(--banana-brown);
         }
+        #start-btn:active { transform: translateY(5px); box-shadow: 0 5px 0 var(--banana-brown); }
 
         .controls { display: flex; gap: 40px; }
         .circle-btn {
@@ -42,8 +43,8 @@
 <body>
 
     <div id="overlay">
-        <button id="start-btn">バナナを起動する 🍌</button>
-        <p style="margin-top:20px; color:var(--banana-brown);">タップしてマイクを許可してください</p>
+        <button id="start-btn">マイクの封印を解く 🍌</button>
+        <p id="hint" style="margin-top:20px; color:var(--banana-brown); text-align:center;">許可ポップアップが出たら<br>必ず「許可」を押してください</p>
     </div>
 
     <div class="controls">
@@ -59,7 +60,7 @@
     <div id="msg" class="message">🎤を長押ししてバナナ化</div>
 
     <script>
-        let mic, analyzer, synth, loop, processor;
+        let micSource, analyzer, synth, loop, processor;
         let bananaBuffer = [];
         let sampleRate;
 
@@ -69,44 +70,52 @@
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
 
-        // 1. 最初のタップで全てを初期化
-        startBtn.addEventListener('click', async () => {
+        async function bootSystem() {
             try {
+                // 1. AudioContextを明示的に開始
                 await Tone.start();
-                mic = new Tone.UserMedia();
-                await mic.open(); // ここで許可ダイアログが出る
-                
-                // 許可が取れたらシステム構築
-                sampleRate = Tone.getContext().sampleRate;
-                analyzer = new Tone.Follower(0.1);
-                mic.connect(analyzer);
+                const ctx = Tone.getContext();
+                sampleRate = ctx.sampleRate;
 
+                // 2. ブラウザ標準APIでマイクを奪い取る
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                // 3. マイクをTone.jsの回路に流し込む
+                micSource = ctx.createMediaStreamSource(stream);
+                analyzer = ctx.createFollower(0.1);
+                micSource.connect(analyzer);
+
+                // シンセとエフェクトの構築
                 synth = new Tone.MonoSynth({
                     oscillator: { type: "square8" },
                     envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
                 });
-
                 const pShift = new Tone.PitchShift(13);
                 const reverb = new Tone.Reverb(1.5);
                 synth.chain(pShift, reverb, Tone.Destination);
 
-                processor = Tone.getContext().createScriptProcessor(4096, 1, 1);
+                // 録音用プロセッサ
+                processor = ctx.createScriptProcessor(4096, 1, 1);
                 processor.onaudioprocess = (e) => {
                     if (recBtn.classList.contains('recording')) {
                         bananaBuffer.push(...e.inputBuffer.getChannelData(0));
                     }
                 };
                 synth.connect(processor);
-                processor.connect(Tone.getContext().destination);
+                processor.connect(ctx.destination);
 
-                overlay.style.display = 'none'; // 成功したら消す
+                // 成功したら画面を切り替え
+                overlay.style.display = 'none';
                 msg.innerText = "準備完了！🎤を長押し。";
-            } catch (e) {
-                alert("マイクを許可して、ページを更新してください。");
+            } catch (err) {
+                console.error(err);
+                startBtn.innerText = "もう一度試す 🍌";
+                document.getElementById('hint').innerText = "エラー: 許可ボタンを押した後、\nもう一度ここをタップしてください。";
             }
-        });
+        }
 
-        // 2. 録音処理
+        startBtn.addEventListener('click', bootSystem);
+
         const handleStart = (e) => {
             if (e) e.preventDefault();
             bananaBuffer = [];
@@ -114,12 +123,13 @@
             playBtn.classList.remove('ready-to-play');
             
             loop = new Tone.Loop(t => {
-                if (analyzer.value > 0.02) {
+                // analyzer.valueはTone.Followerのもの。
+                // 0.01以上（小声）でバナナ化
+                if (analyzer.value > 0.01) {
                     synth.triggerAttackRelease(["C5","E5","G5","A5"][Math.floor(Math.random()*4)], "16n", t);
                 }
             }, "8n").start(0);
             Tone.Transport.start();
-            msg.innerText = "バナナに変換中...";
         };
 
         const handleStop = (e) => {
@@ -128,22 +138,15 @@
                 recBtn.classList.remove('recording');
                 if (loop) loop.stop();
                 Tone.Transport.stop();
-                
-                if (bananaBuffer.length > 0) {
-                    playBtn.classList.add('ready-to-play');
-                    msg.innerText = "バナナ化完了！🍌をタップ。";
-                }
+                if (bananaBuffer.length > 0) playBtn.classList.add('ready-to-play');
             }
         };
 
         const playBanana = async (e) => {
             if (e) e.preventDefault();
-            await Tone.start();
             if (bananaBuffer.length === 0) return;
-
             const buffer = Tone.getContext().createBuffer(1, bananaBuffer.length, sampleRate);
             buffer.copyToChannel(new Float32Array(bananaBuffer), 0);
-            
             const source = Tone.getContext().createBufferSource();
             source.buffer = buffer;
             source.connect(Tone.getContext().destination);
