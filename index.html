@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v4.1 🍌</title>
+    <title>🍌 Bananakun v4.2 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
@@ -12,18 +12,31 @@
             height: 100vh; background: radial-gradient(circle, #fffbe6 0%, #fadb14 100%);
             font-family: sans-serif; overflow: hidden; user-select: none;
         }
+        .controls { display: flex; gap: 40px; }
         .circle-btn {
             width: 140px; height: 140px; border-radius: 50%; border: 8px solid var(--banana-brown);
             background: white; font-size: 5rem; cursor: pointer; transition: all 0.1s; touch-action: manipulation;
+            box-shadow: 0 8px 0 var(--banana-brown);
+            display: flex; justify-content: center; align-items: center;
         }
-        .recording { background: #ffeb3b; transform: scale(1.1); border-color: red; }
-        .label { font-weight: bold; color: var(--banana-brown); margin-top: 10px; }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.8rem; }
+        /* 録音中のスタイル */
+        .recording { background: #ffeb3b !important; transform: scale(1.1); border-color: #ff4444 !important; }
+        
+        /* 再生可能時のスタイル（ふわふわ浮かせる） */
+        .ready-to-play { 
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 8px 0 var(--banana-brown);
+            background: #fff;
+        }
+        
+        .circle-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--banana-brown); }
+        
+        .label { font-weight: bold; color: var(--banana-brown); margin-top: 10px; text-align: center; }
+        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.8rem; text-align: center; width: 80%; }
     </style>
 </head>
 <body>
 
-    <div style="display: flex; gap: 40px;">
+    <div class="controls">
         <div style="text-align: center;">
             <button id="rec-btn" class="circle-btn">🎤</button>
             <div class="label">TRANSFORM</div>
@@ -34,20 +47,17 @@
         </div>
     </div>
 
-    <div class="message">タップしてマイクを許可してください</div>
+    <div class="message">🎤ボタンを長押しして話してください</div>
 
     <script>
         let mic, analyzer, recorder, player, synth, loop;
         let isInitialized = false;
 
-        // マイクとオーディオの初期化
         async function startSystem() {
             try {
                 await Tone.start();
-                console.log("Audio Context Started");
-
                 mic = new Tone.UserMedia();
-                await mic.open(); // ここでポップアップが出るはずです
+                await mic.open();
                 
                 analyzer = new Tone.Follower(0.1);
                 mic.connect(analyzer);
@@ -58,7 +68,9 @@
                 }).toDestination();
 
                 const pitchShift = new Tone.PitchShift(12).toDestination();
+                const reverb = new Tone.Reverb(2).toDestination();
                 synth.connect(pitchShift);
+                synth.connect(reverb);
 
                 recorder = new Tone.Recorder();
                 synth.connect(recorder);
@@ -66,22 +78,23 @@
                 isInitialized = true;
                 document.querySelector('.message').innerText = "準備完了。🎤を押しながら話して。";
             } catch (e) {
-                console.error("マイクの起動に失敗しました:", e);
-                alert("マイクの使用を許可してください。");
+                alert("マイクを許可してください");
             }
         }
 
         const recBtn = document.getElementById('rec-btn');
         const playBtn = document.getElementById('play-btn');
 
-        // 録音開始
-        recBtn.addEventListener('mousedown', async () => {
-            if (!isInitialized) {
-                await startSystem();
-            }
+        // --- 録音開始 ---
+        const handleStart = async (e) => {
+            e.preventDefault();
+            if (!isInitialized) await startSystem();
+            
             if (isInitialized) {
                 recBtn.classList.add('recording');
+                playBtn.classList.remove('ready-to-play');
                 recorder.start();
+                
                 loop = new Tone.Loop(time => {
                     if (analyzer.value > 0.05) {
                         const notes = ["C5", "D5", "E5", "G5"];
@@ -90,27 +103,48 @@
                 }, "8n").start(0);
                 Tone.Transport.start();
             }
-        });
+        };
 
-        // 録音終了
-        const stopRec = async () => {
+        // --- 録音終了 ---
+        const handleStop = async (e) => {
+            e.preventDefault();
             if (isInitialized && recorder.state === "started") {
                 recBtn.classList.remove('recording');
                 loop.stop();
                 Tone.Transport.stop();
+                
                 const blob = await recorder.stop();
                 const url = URL.createObjectURL(blob);
+                
+                // 既存のPlayerがあれば破棄
+                if (player) player.dispose();
+                
                 player = new Tone.Player(url).toDestination();
+                // ロード完了を待ってからボタンを光らせる
+                player.buffer.onload = () => {
+                    playBtn.classList.add('ready-to-play');
+                    document.querySelector('.message').innerText = "バナナに変換されました。🍌を押して。";
+                };
             }
         };
 
-        window.addEventListener('mouseup', stopRec);
-        // スマホ用
-        recBtn.addEventListener('touchstart', (e) => { e.preventDefault(); recBtn.dispatchEvent(new Event('mousedown')); });
-        recBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRec(); });
+        // イベント登録（マウス）
+        recBtn.addEventListener('mousedown', handleStart);
+        window.addEventListener('mouseup', handleStop);
 
-        playBtn.addEventListener('click', () => {
-            if (player) player.start();
+        // イベント登録（スマホ）
+        recBtn.addEventListener('touchstart', handleStart);
+        recBtn.addEventListener('touchend', handleStop);
+
+        // --- 再生 ---
+        playBtn.addEventListener('click', async () => {
+            if (player && player.loaded) {
+                await Tone.start(); // ユーザーインタラクションの再確認
+                player.start();
+                console.log("Playing banana sound...");
+            } else {
+                console.log("Player not ready yet");
+            }
         });
     </script>
 </body>
