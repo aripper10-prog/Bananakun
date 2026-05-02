@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>🍌 Bananakun v5 - Gauge Edition 🍌</title>
+    <title>🍌 Bananakun v5.1 - Fix 🍌</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         :root { --banana-skin: #fadb14; --banana-brown: #6f4e37; }
@@ -22,27 +22,18 @@
         }
 
         .controls { display: flex; gap: 40px; z-index: 10; }
-        
         .btn-container { position: relative; width: 140px; height: 140px; }
 
-        /* 円形ゲージのSVG */
         .gauge-svg {
-            position: absolute;
-            top: -10px; left: -10px;
-            width: 160px; height: 160px;
-            transform: rotate(-90deg);
-            pointer-events: none;
+            position: absolute; top: -10px; left: -10px;
+            width: 160px; height: 160px; transform: rotate(-90deg); pointer-events: none;
         }
 
         .gauge-bg { fill: none; stroke: rgba(0,0,0,0.1); stroke-width: 8; }
         .gauge-bar {
-            fill: none;
-            stroke: var(--banana-brown);
-            stroke-width: 8;
-            stroke-dasharray: 440; /* 2 * PI * r */
-            stroke-dashoffset: 440;
-            stroke-linecap: round;
-            transition: stroke-dashoffset 0.1s linear;
+            fill: none; stroke: var(--banana-brown); stroke-width: 8;
+            stroke-dasharray: 440; stroke-dashoffset: 440;
+            stroke-linecap: round; transition: stroke-dashoffset 0.1s linear;
         }
 
         .circle-btn {
@@ -50,23 +41,27 @@
             background: white; font-size: 5rem; cursor: pointer;
             box-shadow: 0 8px 0 var(--banana-brown);
             display: flex; justify-content: center; align-items: center;
-            outline: none; position: relative; z-index: 5;
+            outline: none; position: relative; z-index: 5; transition: all 0.1s;
         }
         
-        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; }
+        /* 録音中：赤っぽく */
+        .recording { background: #ffeb3b !important; border-color: #ff4444 !important; transform: scale(1.05); }
+
+        /* 再生可能：光らせる */
         .ready-to-play { 
-            box-shadow: 0 0 30px rgba(255, 255, 255, 1), 0 8px 0 var(--banana-brown); 
-            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 40px #fff, 0 8px 0 var(--banana-brown) !important;
+            border-color: #38b2ac !important;
+            animation: pulse 1s infinite;
         }
 
         @keyframes pulse {
             0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
+            50% { transform: scale(1.1); }
             100% { transform: scale(1); }
         }
         
         .label { font-weight: bold; color: var(--banana-brown); margin-top: 15px; text-align: center; }
-        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.8rem; text-align: center; width: 80%; line-height: 1.5; }
+        .message { position: absolute; bottom: 30px; color: var(--banana-brown); font-size: 0.9rem; text-align: center; width: 80%; background: rgba(255,255,255,0.3); padding: 10px; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -90,14 +85,14 @@
         </div>
     </div>
 
-    <div id="msg" class="message">マイクを許可して、🎤を押し続けてください</div>
+    <div id="msg" class="message">🎤を長押ししてマイクを許可</div>
 
     <script>
         let mic, analyzer, recorder, player, synth, loop;
         let isInitialized = false;
         let recordStartTime;
         let gaugeInterval;
-        const MAX_REC_TIME = 5000; // 最大5秒
+        const MAX_REC_TIME = 5000;
         
         const msg = document.getElementById('msg');
         const gaugeBar = document.getElementById('gauge-bar');
@@ -109,50 +104,48 @@
                 await Tone.start();
                 mic = new Tone.UserMedia();
                 await mic.open();
+                
                 analyzer = new Tone.Follower(0.1);
                 mic.connect(analyzer);
+
                 synth = new Tone.MonoSynth({
                     oscillator: { type: "square8" },
                     envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.1 }
                 }).toDestination();
+
                 const pitchShift = new Tone.PitchShift(12).toDestination();
                 synth.connect(pitchShift);
+
                 recorder = new Tone.Recorder();
                 synth.connect(recorder);
+
                 isInitialized = true;
                 msg.innerText = "準備完了。🎤を押しながら話して。";
             } catch (e) {
-                alert("マイク設定を確認してください");
+                msg.innerText = "エラー: マイクを許可してください";
             }
         }
 
         const updateGauge = () => {
             const elapsed = Date.now() - recordStartTime;
             const progress = Math.min(elapsed / MAX_REC_TIME, 1);
-            const offset = 440 - (progress * 440);
-            gaugeBar.style.strokeDashoffset = offset;
-            
-            if (progress >= 1) {
-                handleStop(new Event('touchend'));
-            }
+            gaugeBar.style.strokeDashoffset = 440 - (progress * 440);
+            if (progress >= 1) handleStop();
         };
 
         const handleStart = async (e) => {
-            e.preventDefault();
+            if(e) e.preventDefault();
             if (!isInitialized) await startSystem();
             if (isInitialized) {
                 recBtn.classList.add('recording');
                 playBtn.classList.remove('ready-to-play');
                 gaugeBar.style.strokeDashoffset = 440;
-                
                 recordStartTime = Date.now();
                 gaugeInterval = setInterval(updateGauge, 50);
-                
                 recorder.start();
                 loop = new Tone.Loop(time => {
                     if (analyzer.value > 0.05) {
-                        const notes = ["C5", "D5", "E5", "G5"];
-                        synth.triggerAttackRelease(notes[Math.floor(Math.random()*4)], "16n", time);
+                        synth.triggerAttackRelease(["C5","E5","G5"][Math.floor(Math.random()*3)], "16n", time);
                     }
                 }, "8n").start(0);
                 Tone.Transport.start();
@@ -160,17 +153,21 @@
         };
 
         const handleStop = async (e) => {
-            if (e) e.preventDefault();
+            if(e) e.preventDefault();
             if (isInitialized && recorder.state === "started") {
                 clearInterval(gaugeInterval);
                 recBtn.classList.remove('recording');
                 if (loop) loop.stop();
                 Tone.Transport.stop();
                 
+                msg.innerText = "バナナに変換中...";
                 const blob = await recorder.stop();
                 const url = URL.createObjectURL(blob);
+                
                 if (player) player.dispose();
                 player = new Tone.Player(url).toDestination();
+                
+                // ロードを待って確実にUI更新
                 player.buffer.onload = () => {
                     playBtn.classList.add('ready-to-play');
                     msg.innerText = "バナナ化完了。🍌を押して。";
@@ -180,19 +177,25 @@
 
         recBtn.addEventListener('mousedown', handleStart);
         window.addEventListener('mouseup', handleStop);
-        recBtn.addEventListener('touchstart', handleStart, {passive: false});
-        recBtn.addEventListener('touchend', handleStop, {passive: false});
+        recBtn.addEventListener('touchstart', handleStart);
+        recBtn.addEventListener('touchend', handleStop);
 
-        const handlePlay = async (e) => {
+        playBtn.addEventListener('touchstart', async (e) => {
             e.preventDefault();
-            if (player && player.loaded) {
+            if (player && player.buffer.loaded) {
+                await Tone.start();
+                player.start();
+            } else {
+                msg.innerText = "まだバナナが詰まっていません";
+            }
+        });
+
+        playBtn.addEventListener('click', async (e) => {
+            if (player && player.buffer.loaded) {
                 await Tone.start();
                 player.start();
             }
-        };
-
-        playBtn.addEventListener('click', handlePlay);
-        playBtn.addEventListener('touchstart', handlePlay, {passive: false});
+        });
     </script>
 </body>
 </html>
