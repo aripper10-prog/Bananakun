@@ -43,7 +43,6 @@
         .sub-title { font-size: 11px; font-weight: bold; letter-spacing: 1.5px; opacity: 0.8; }
         .main-title { font-size: 28px; font-weight: bold; margin-top: 5px; }
 
-        /* 追加された説明文のスタイル */
         .description-text {
             font-size: 12px; font-weight: bold; opacity: 0.7; margin-bottom: 20px; text-align: center;
         }
@@ -184,20 +183,32 @@
         async function processBananakun(blob) {
             transDisplay.innerText = "無効化中...";
             bananaScript = "";
+            bananaDisplay.innerText = "";
             try {
                 const response = await fetch('/api', { method: 'POST', body: blob });
+                
+                // ストリーミング受信ロジック
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                let raw = "";
+                let fullResponse = "";
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-                    raw += decoder.decode(value);
+                    
+                    fullResponse += decoder.decode(value, { stream: true });
+
+                    if (fullResponse.includes('|')) {
+                        const parts = fullResponse.split('|');
+                        transDisplay.innerText = parts[0].replace("原文:", "").trim();
+                        bananaScript = parts[1].trim();
+                        bananaDisplay.innerText = bananaScript;
+                    } else {
+                        // 区切り文字が出る前は暫定的に表示
+                        bananaDisplay.innerText = fullResponse;
+                    }
                 }
-                const parts = raw.split('|');
-                transDisplay.innerText = parts[0] ? parts[0].replace("原文:", "").trim() : "";
-                bananaScript = parts[1] ? parts[1].trim() : raw;
-                bananaDisplay.innerText = "🍌 READY";
+                
                 playBtn.classList.add('ready-to-play');
             } catch (e) {
                 transDisplay.innerText = "解析エラー";
